@@ -24,6 +24,10 @@ const(
 
 	TOKEN_ASSIGN = iota
 	TOKEN_EQUAL = iota
+	TOKEN_LESS = iota
+	TOKEN_LESS_EQUAL = iota
+	TOKEN_GREATER = iota
+	TOKEN_GREATER_EQUAL = iota
 	TOKEN_DIFFERENT = iota
 	TOKEN_AND = iota
 	TOKEN_OR = iota
@@ -90,6 +94,10 @@ var tokenTypesString = []string{
 
 	"TOKEN_ASSIGN",
 	"TOKEN_EQUAL",
+	"TOKEN_LESS",
+	"TOKEN_LESS_EQUAL",
+	"TOKEN_GREATER",
+	"TOKEN_GREATER_EQUAL",
 	"TOKEN_DIFFERENT",
 	"TOKEN_AND",
 	"TOKEN_OR",
@@ -235,6 +243,34 @@ func (this *Lexer) parseEqual() (error, *Token) {
 	}
 
 	return nil, &Token {tokenType: TOKEN_ASSIGN}
+}
+
+func (this *Lexer) parseLess() (error, *Token) {
+	currentCharacter := this.text[this.currentPosition]
+	if currentCharacter != '<' {
+		return fmt.Errorf("invalid character"), nil
+	}
+
+	err := this.advance()
+	if err == nil && this.text[this.currentPosition] == '=' {
+		return this.SimpleToken(TOKEN_LESS_EQUAL)
+	}
+
+	return nil, &Token {tokenType: TOKEN_LESS}
+}
+
+func (this *Lexer) parseGreater() (error, *Token) {
+	currentCharacter := this.text[this.currentPosition]
+	if currentCharacter != '>' {
+		return fmt.Errorf("invalid character"), nil
+	}
+
+	err := this.advance()
+	if err == nil && this.text[this.currentPosition] == '=' {
+		return this.SimpleToken(TOKEN_GREATER_EQUAL)
+	}
+
+	return nil, &Token {tokenType: TOKEN_GREATER}
 }
 
 func (this *Lexer) parseNot() (error, *Token) {
@@ -495,6 +531,10 @@ func (this *Lexer) next() (error, *Token) {
 		return this.parseDivide()
 	case '=':
 		return this.parseEqual()
+	case '<':
+		return this.parseLess()
+	case '>':
+		return this.parseGreater()
 	case '!':
 		return this.parseNot()
 	case '(':
@@ -511,6 +551,8 @@ func (this *Lexer) next() (error, *Token) {
 		return this.SimpleToken(TOKEN_CLOSED_SQUARE)
 	case ',':
 		return this.SimpleToken(TOKEN_COMMA)
+	case '.':
+		return this.SimpleToken(TOKEN_DOT)
 	case ':':
 		return this.SimpleToken(TOKEN_COLONS)
 	case '"':

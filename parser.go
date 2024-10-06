@@ -40,11 +40,73 @@ const (
 	NODE_TYPE_CUSTOM = iota
 )
 
+var nodeStrings = []string {
+	"NODE_PROGRAM",
+	"NODE_LINK",
+	"NODE_ADD",
+	"NODE_SUBSTRACT",
+	"NODE_MULTIPLY",
+	"NODE_DIVIDE",
+	"NODE_EXPRESSION",
+	"NODE_ASSIGNMENT",
+	"NODE_DECLARATION",
+	"NODE_PARAMETER",
+	"NODE_STATEMENT",
+	"NODE_RETURN",
+	"NODE_IF",
+	"NODE_BRANCH",
+	"NODE_VARIABLE",
+	"NODE_WHILE",
+	"NODE_FOR",
+	"NODE_METADATA",
+	"NODE_MEMBER",
+	"NODE_MODULE",
+	"NODE_CONST",
+	"NODE_ITERATION",
+	"NODE_STRUCT",
+	"NODE_FUNCTION_DECLARATION",
+	"NODE_INTERFACE_FUNCTION_DELCARATION",
+	"NODE_IMPLEMENT_FUNCTION_DEFINITION",
+	"NODE_FUNCTION",
+	"NODE_IMPLEMENT",
+	"NODE_INTERFACE",
+	"NODE_IMPORT",
+	"NODE_TYPE_BOOL",
+	"NODE_TYPE_INT",
+	"NODE_TYPE_FLOAT",
+	"NODE_TYPE_STRING",
+	"NODE_TYPE_CUSTOM",
+}
+
 type Node struct {
 	nodeType int
 	token    *Token
 	left     *Node
 	right    *Node
+}
+
+func (this *Node) ToString() string {
+	return fmt.Sprintf("node: %s", nodeStrings[this.nodeType])
+}
+
+func (this *Node) Dump(indent int) {
+	for i := 0; i < indent - 4; i++ {
+		fmt.Print(" ")
+	}
+
+    if indent > 0 {
+        fmt.Print("└── ")
+    }
+
+	fmt.Println(this.ToString())
+
+	if this.left != nil {
+		this.left.Dump(indent + 4)
+	}
+
+	if this.right != nil {
+		this.right.Dump(indent + 4)
+	}
 }
 
 type Parser struct {
@@ -59,6 +121,36 @@ func newParser(lexer *Lexer) *Parser {
 	}
 }
 
+func (this *Parser) invalidTokenError(expectedTokenType int) error {
+	err := fmt.Errorf("Invalid token: %s, expected: %s", this.currentToken.toString(), tokenTypesString[expectedTokenType])
+
+	panic(err)
+}
+
+func  (this *Parser) unexpectedTokenError() error {
+	err := fmt.Errorf("Unexpected token: %s", this.currentToken.toString())
+	panic(err)
+}
+
+func (this *Parser) expectToken(expectedTokenType int) error {
+	if this.currentToken.tokenType != expectedTokenType {
+		return this.invalidTokenError(expectedTokenType)
+	}
+
+	return nil
+}
+
+func (this *Parser) eat(expectedTokenType int) error {
+	err := this.expectToken(expectedTokenType)
+	if err != nil {
+		return err
+	}
+
+	this.advance()
+
+	return nil
+}
+
 func (this *Parser) advance() error {
 	err, token := this.lexer.next()
 	if err != nil {
@@ -70,7 +162,7 @@ func (this *Parser) advance() error {
 }
 
 func (this *Parser) parseExpression() (error, *Node) {
-	return nil, nil
+	return fmt.Errorf("Expression parsing not implemented yet"), nil
 }
 
 func (this *Parser) parseExpressionStatement() (error, *Node) {
@@ -79,9 +171,10 @@ func (this *Parser) parseExpressionStatement() (error, *Node) {
 		return err, nil
 	}
 
-	if this.currentToken.tokenType != TOKEN_EQUAL {
+	if this.currentToken.tokenType != TOKEN_ASSIGN {
 		return nil, expression
 	}
+
 	this.advance()
 
 	// TODO: Check if expression is lvalue
@@ -100,29 +193,35 @@ func (this *Parser) parseExpressionStatement() (error, *Node) {
 }
 
 func (this *Parser) parseTypeSpecification() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_COLONS {
-		return fmt.Errorf("Invalid token"), nil
+	err := this.eat(TOKEN_COLONS)
+	if err != nil {
+		return err, nil
 	}
+
+	var node *Node
+	if this.currentToken.tokenType == TOKEN_TYPE_BOOL {
+		node = &Node { nodeType: NODE_TYPE_BOOL }
+	} else if this.currentToken.tokenType == TOKEN_TYPE_INT {
+		node = &Node { nodeType: NODE_TYPE_INT }
+	} else if this.currentToken.tokenType == TOKEN_TYPE_FLOAT {
+		node = &Node { nodeType: NODE_TYPE_FLOAT }
+	} else if this.currentToken.tokenType == TOKEN_TYPE_STRING {
+		node = &Node { nodeType: NODE_TYPE_STRING }
+	} else if this.currentToken.tokenType == TOKEN_IDENTIFIER {
+		node = &Node { nodeType: NODE_TYPE_CUSTOM }
+	} else {
+		return this.unexpectedTokenError(), nil
+	}
+
 	this.advance()
 
-	if this.currentToken.tokenType == TOKEN_TYPE_BOOL {
-		return nil, &Node { nodeType: NODE_TYPE_BOOL }
-	} else if this.currentToken.tokenType == TOKEN_TYPE_INT {
-		return nil, &Node { nodeType: NODE_TYPE_INT }
-	} else if this.currentToken.tokenType == TOKEN_TYPE_FLOAT {
-		return nil, &Node { nodeType: NODE_TYPE_FLOAT }
-	} else if this.currentToken.tokenType == TOKEN_TYPE_STRING {
-		return nil, &Node { nodeType: NODE_TYPE_STRING }
-	} else if this.currentToken.tokenType == TOKEN_IDENTIFIER {
-		return nil, &Node { nodeType: NODE_TYPE_CUSTOM }
-	}
-
-	return fmt.Errorf("Invalid token"), nil
+	return nil, node
 }
 
 func (this *Parser) parseTypedIdentifier() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_IDENTIFIER {
-		return fmt.Errorf("invalid token"), nil
+	err := this.expectToken(TOKEN_IDENTIFIER)
+	if err != nil {
+		return err, nil
 	}
 
 	variableNode := &Node {
@@ -143,13 +242,14 @@ func (this *Parser) parseTypedIdentifier() (error, *Node) {
 }
 
 func (this *Parser) parseVariableDeclaration() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_TYPE_VAR {
-		return fmt.Errorf("invalid token"), nil
+	err := this.eat(TOKEN_TYPE_VAR)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
-	if this.currentToken.tokenType != TOKEN_IDENTIFIER {
-		return fmt.Errorf("invalid token"), nil
+	err = this.expectToken(TOKEN_IDENTIFIER)
+	if err != nil {
+		return err, nil
 	}
 
 	variableNode := &Node{
@@ -180,7 +280,7 @@ func (this *Parser) parseVariableDeclaration() (error, *Node) {
 	}
 
 	if variableTypeNode == nil && expressionNode == nil {
-		return fmt.Errorf("invalid token"), nil
+		return fmt.Errorf("Variable needs to be either typed or initialized"), nil
 	}
 
 	variableNode.left = variableTypeNode
@@ -190,13 +290,14 @@ func (this *Parser) parseVariableDeclaration() (error, *Node) {
 }
 
 func (this *Parser) parseConstant() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_CONST {
-		return fmt.Errorf("invalid token"), nil
+	err := this.eat(TOKEN_CONST)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
-	if this.currentToken.tokenType != TOKEN_IDENTIFIER {
-		return fmt.Errorf("invalid token"), nil
+	err = this.expectToken(TOKEN_IDENTIFIER)
+	if err != nil {
+		return err, nil
 	}
 
 	constNode := &Node{
@@ -215,10 +316,10 @@ func (this *Parser) parseConstant() (error, *Node) {
 		}
 	}
 
-	if this.currentToken.tokenType != TOKEN_EQUAL {
-		return fmt.Errorf("invalid Token"), nil
+	err = this.eat(TOKEN_EQUAL)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
 	err, expressionNode := this.parseExpression()
 	if err != nil {
@@ -232,10 +333,10 @@ func (this *Parser) parseConstant() (error, *Node) {
 }
 
 func (this *Parser) parseIf() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_IF {
-		return fmt.Errorf("Invalid token"), nil
+	err := this.eat(TOKEN_IF)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
 	err, expressionNode := this.parseExpression()
 	if err != nil {
@@ -267,7 +368,7 @@ func (this *Parser) parseIf() (error, *Node) {
 		if err != nil {
 			return err, nil
 		}
-		
+
 		branchNode.right = elseNode
 	}
 
@@ -281,10 +382,10 @@ func (this *Parser) parseIf() (error, *Node) {
 }
 
 func (this *Parser) parseWhile() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_WHILE {
-		return fmt.Errorf("Invalid token"), nil
+	err := this.eat(TOKEN_WHILE)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
 	err, expressionNode := this.parseExpression()
 	if err != nil {
@@ -308,7 +409,7 @@ func (this *Parser) parseWhile() (error, *Node) {
 		if err != nil {
 			return err, nil
 		}
-		
+
 		branchNode.right = elseNode
 	}
 
@@ -322,13 +423,14 @@ func (this *Parser) parseWhile() (error, *Node) {
 }
 
 func (this *Parser) parseFor() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_FOR {
-		return fmt.Errorf("Invalid token"), nil
+	err := this.eat(TOKEN_FOR)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
-	if this.currentToken.tokenType != TOKEN_IDENTIFIER {
-		return fmt.Errorf("invalid token"), nil
+	err = this.expectToken(TOKEN_IDENTIFIER)
+	if err != nil {
+		return err, nil
 	}
 
 	iteratorNode := &Node{
@@ -346,10 +448,10 @@ func (this *Parser) parseFor() (error, *Node) {
 		}
 	}
 
-	if this.currentToken.tokenType != TOKEN_IN {
-		return fmt.Errorf("Invalid token"), nil
+	err = this.eat(TOKEN_IN)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
 	err, iterableNode := this.parseExpression()
 	if err != nil {
@@ -378,10 +480,10 @@ func (this *Parser) parseFor() (error, *Node) {
 }
 
 func (this *Parser) parseReturn() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_RETURN {
-		return fmt.Errorf("Invalid token"), nil
+	err := this.eat(TOKEN_RETURN)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
 	err, expressionNode := this.parseExpression()
 	if err != nil {
@@ -425,10 +527,10 @@ func (this *Parser) parseStatement() (error, *Node) {
 }
 
 func (this *Parser) parseBlock() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_OPEN_BRACKET {
-		return fmt.Errorf("Invalid token"), nil
+	err := this.eat(TOKEN_OPEN_BRACKET)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
 	root := &Node{
 		nodeType: NODE_STATEMENT,
@@ -458,10 +560,10 @@ func (this *Parser) parseBlock() (error, *Node) {
 }
 
 func (this *Parser) parseMembers() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_OPEN_BRACKET {
-		return fmt.Errorf("Invalid token"), nil
+	err := this.eat(TOKEN_OPEN_BRACKET)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
 	root := &Node{
 		nodeType: NODE_MEMBER,
@@ -491,13 +593,14 @@ func (this *Parser) parseMembers() (error, *Node) {
 }
 
 func (this *Parser) parseStruct() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_TYPE_STRUCT {
-		return fmt.Errorf("invalid token"), nil
+	err := this.eat(TOKEN_TYPE_STRUCT)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
-	if this.currentToken.tokenType != TOKEN_IDENTIFIER {
-		return fmt.Errorf("invalid token"), nil
+	err = this.expectToken(TOKEN_IDENTIFIER)
+	if err != nil {
+		return err, nil
 	}
 
 	structNode := &Node {
@@ -518,17 +621,17 @@ func (this *Parser) parseStruct() (error, *Node) {
 }
 
 func (this *Parser) parseFunctionParameters() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_OPEN_PARANTHESIS {
-		return fmt.Errorf("invalid token"), nil
+	err := this.eat(TOKEN_OPEN_PARANTHESIS)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
 	root := &Node{
 		nodeType: NODE_PROGRAM,
 	}
 	currentNode := root
 
-	for {
+	for this.currentToken.tokenType != TOKEN_CLOSED_PARANTHESIS {
 		err, node := this.parseTypedIdentifier()
 		if err != nil {
 			return err, nil
@@ -545,14 +648,9 @@ func (this *Parser) parseFunctionParameters() (error, *Node) {
 			currentNode = node
 		}
 
-		if this.currentToken.tokenType != TOKEN_COMMA {
-			break
+		if this.currentToken.tokenType == TOKEN_COMMA {
+			this.advance()
 		}
-		this.advance()
-	}
-
-	if this.currentToken.tokenType != TOKEN_CLOSED_PARANTHESIS {
-		return fmt.Errorf("Invalid token"), nil
 	}
 	this.advance()
 
@@ -560,13 +658,14 @@ func (this *Parser) parseFunctionParameters() (error, *Node) {
 }
 
 func (this *Parser) parseFunctionDeclaration() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_FUNCTION {
-		return fmt.Errorf("Invalid token"), nil
+	err := this.eat(TOKEN_FUNCTION)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
-	if this.currentToken.tokenType != TOKEN_IDENTIFIER {
-		return fmt.Errorf("Invalid token"), nil
+	err = this.expectToken(TOKEN_IDENTIFIER)
+	if err != nil {
+		return err, nil
 	}
 
 	functionDeclarationNode := &Node {
@@ -596,10 +695,10 @@ func (this *Parser) parseFunctionDeclaration() (error, *Node) {
 }
 
 func (this *Parser) parseInterfaceFunctionDeclarations() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_OPEN_BRACKET {
-		return fmt.Errorf("Invalid token"), nil
+	err := this.eat(TOKEN_OPEN_BRACKET)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
 	root := &Node{
 		nodeType: NODE_INTERFACE_FUNCTION_DELCARATION,
@@ -631,12 +730,12 @@ func (this *Parser) parseInterfaceFunctionDeclarations() (error, *Node) {
 func (this *Parser) parseFunction() (error, *Node) {
 	err, functionDeclarationNode := this.parseFunctionDeclaration()
 	if err != nil {
-		return fmt.Errorf("invalid token"), nil
+		return err, nil
 	}
 
 	err, statementsNode := this.parseBlock()
 	if err != nil {
-		return fmt.Errorf("invalid token"), nil
+		return err, nil
 	}
 
 	functionNode := &Node {
@@ -649,10 +748,10 @@ func (this *Parser) parseFunction() (error, *Node) {
 }
 
 func (this *Parser) parseImplementFunctionDefinitions() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_OPEN_BRACKET {
-		return fmt.Errorf("Invalid token"), nil
+	err := this.eat(TOKEN_OPEN_BRACKET)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
 	root := &Node{
 		nodeType: NODE_IMPLEMENT_FUNCTION_DEFINITION,
@@ -683,13 +782,14 @@ func (this *Parser) parseImplementFunctionDefinitions() (error, *Node) {
 }
 
 func (this *Parser) parseInterface() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_TYPE_INTERFACE {
-		return fmt.Errorf("Invalid token"), nil
+	err := this.eat(TOKEN_TYPE_INTERFACE)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
-	if this.currentToken.tokenType != TOKEN_IDENTIFIER {
-		return fmt.Errorf("Invalid token"), nil
+	err = this.expectToken(TOKEN_IDENTIFIER)
+	if err != nil {
+		return err, nil
 	}
 
 	interfaceNode := &Node {
@@ -710,19 +810,21 @@ func (this *Parser) parseInterface() (error, *Node) {
 }
 
 func (this *Parser) parseImplement() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_IMPLEMENT {
-		return fmt.Errorf("Invalid token"), nil
+	err := this.eat(TOKEN_IMPLEMENT)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
-	if this.currentToken.tokenType != TOKEN_IDENTIFIER {
-		return fmt.Errorf("Invalid token"), nil
+	err = this.expectToken(TOKEN_IDENTIFIER)
+	if err != nil {
+		return err, nil
 	}
 
 	implementNode := &Node {
 		nodeType: NODE_IMPLEMENT,
 		token: this.currentToken,
 	}
+
 	this.advance()
 
 	err, functionDefinitionsNode := this.parseImplementFunctionDefinitions()
@@ -756,7 +858,7 @@ func (this *Parser) parseDeclaration() (error, *Node) {
 		return this.parseConstant()
 	}
 
-	return fmt.Errorf("Invalid token"), nil
+	return this.unexpectedTokenError(), nil
 }
 
 func (this *Parser) parseDeclarations() (error, *Node) {
@@ -812,7 +914,7 @@ func (this *Parser) parseExport() (error, *Node) {
 		return this.parseDeclarations()
 	}
 
-	return fmt.Errorf("invalid token"), nil
+	return this.unexpectedTokenError(), nil
 }
 
 func (this *Parser) parseRootStatement() (error, *Node) {
@@ -840,14 +942,14 @@ func (this *Parser) parseRootStatement() (error, *Node) {
 		return this.parseExport()
 	}
 
-	return fmt.Errorf("Invalid token in root declaration"), nil
+	return this.unexpectedTokenError(), nil
 }
 
 func (this *Parser) parseModule() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_MODULE {
-		return fmt.Errorf("invalid token"), nil
+	err := this.eat(TOKEN_MODULE)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
 	root := &Node {
 		nodeType: NODE_MODULE,
@@ -856,8 +958,9 @@ func (this *Parser) parseModule() (error, *Node) {
 	currentNode := root
 
 	for {
-		if this.currentToken.tokenType != TOKEN_IDENTIFIER {
-			return fmt.Errorf("invalid token"), nil
+		err := this.expectToken(TOKEN_IDENTIFIER)
+		if err != nil {
+			return err, nil
 		}
 
 		node := &Node {
@@ -887,10 +990,10 @@ func (this *Parser) parseModule() (error, *Node) {
 }
 
 func (this *Parser) parseImport() (error, *Node) {
-	if this.currentToken.tokenType != TOKEN_IMPORT {
-		return fmt.Errorf("invalid token"), nil
+	err := this.eat(TOKEN_IMPORT)
+	if err != nil {
+		return err, nil
 	}
-	this.advance()
 
 	root := &Node {
 		nodeType: NODE_IMPORT,
@@ -899,8 +1002,9 @@ func (this *Parser) parseImport() (error, *Node) {
 	currentNode := root
 
 	for {
-		if this.currentToken.tokenType != TOKEN_IDENTIFIER {
-			return fmt.Errorf("invalid token"), nil
+		err := this.expectToken(TOKEN_IDENTIFIER)
+		if err != nil {
+			return err, nil
 		}
 
 		node := &Node {
@@ -939,7 +1043,7 @@ func (this *Parser) parseImports() (error, *Node) {
 	for this.currentToken.tokenType == TOKEN_IMPORT {
 		err, node := this.parseImport()
 		if err != nil {
-			return fmt.Errorf("invalid token"), nil
+			return err, nil
 		}
 
 		if currentNode.left == nil {

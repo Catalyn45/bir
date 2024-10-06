@@ -1,10 +1,11 @@
 package main
 
-func main ()  {
+func main() {
 	var text = `
-	var a : int = 10
-	a += 10
-	b += 20
+	module a.b
+
+	import b.c
+	import c
 
 	struct a {
 		a: int
@@ -13,26 +14,25 @@ func main ()  {
 	}
 
 	interface I {
-		f()
-		fu(a: bool, b: bool)
+		function f()
+		function fu(a: bool, b: bool)
 	}
 
-	func functie (a: int, b: int) :int {
-		return a + b
+	function functie (a: int, b: int) :int {
 	}
-	`
+
+	function main() {
+		var a: int
+	}
+`
 
 	lexer := newLexer(text)
-	for {
-		err, token := lexer.next()
-		if err != nil {
-			panic(err)
-		}
+	parser := newParser(lexer)
 
-		print(token.toString(), "\n")
-
-		if token.tokenType == TOKEN_EOF {
-			break
-		}
+	err, root := parser.Parse()
+	if err != nil {
+		panic(err)
 	}
+
+	root.Dump(4)
 }
