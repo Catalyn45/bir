@@ -1,0 +1,49 @@
+module main
+
+import std
+
+interface Displayable {
+    function show()
+}
+
+struct Node {
+    a: int
+    b: int
+}
+
+implement Node {
+    init(a, b) {
+        this.a = a
+        this.b = b
+    }
+
+    function show() {
+        print(a + " " + b)
+    }
+
+    function add(a: int, b: int): int {
+        return a + b
+    }
+}
+
+function showMe(s: Displayable) {
+    s.show()
+}
+
+const grav: int = 10
+const PI = 3.14
+
+function main(args: list<string>): int {
+    var a = Node(1, 2)
+
+    var first: int = 10
+    var second: int = 20
+
+    var result = a.add(first, second)
+
+    if result == 30 {
+        showMe(a)
+    }
+
+    return 0
+}

@@ -12,6 +12,7 @@ const(
 	TOKEN_INT_LITERAL = iota
 	TOKEN_FLOAT_LITERAL = iota
 
+	TOKEN_MODULE = iota
 	TOKEN_FUNCTION = iota
 	TOKEN_RETURN = iota
 	TOKEN_IMPORT = iota
@@ -59,6 +60,7 @@ const(
 	TOKEN_ELSE = iota
 	TOKEN_WHILE = iota
 	TOKEN_FOR = iota
+	TOKEN_IN = iota
 
 	TOKEN_COMMA = iota
 	TOKEN_DOT = iota
@@ -76,6 +78,7 @@ var tokenTypesString = []string{
 	"TOKEN_INT_LITERAL",
 	"TOKEN_FLOAT_LITERAL",
 
+	"TOKEN_MODULE",
 	"TOKEN_FUNCTION",
 	"TOKEN_RETURN",
 	"TOKEN_IMPORT",
@@ -123,6 +126,7 @@ var tokenTypesString = []string{
 	"TOKEN_ELSE",
 	"TOKEN_WHILE",
 	"TOKEN_FOR",
+	"TOKEN_IN",
 
 	"TOKEN_COMMA",
 	"TOKEN_DOT",
@@ -255,6 +259,8 @@ func (this *Lexer) getKeyword(text string) (error, *Token) {
 		return nil, &Token{tokenType: TOKEN_ELSE}
 	case "for":
 		return nil, &Token{tokenType: TOKEN_FOR}
+	case "in":
+		return nil, &Token{tokenType: TOKEN_IN}
 	case "while":
 		return nil, &Token{tokenType: TOKEN_WHILE}
 	case "int":
@@ -283,6 +289,8 @@ func (this *Lexer) getKeyword(text string) (error, *Token) {
 		return nil, &Token{tokenType: TOKEN_TYPE_INTERFACE}
 	case "implement":
 		return nil, &Token{tokenType: TOKEN_IMPLEMENT}
+	case "module":
+		return nil, &Token{tokenType: TOKEN_MODULE}
 	case "function":
 		return nil, &Token{tokenType: TOKEN_FUNCTION}
 	case "return":
