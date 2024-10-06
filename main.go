@@ -18,7 +18,8 @@ func main() {
 		function fu(a: bool, b: bool)
 	}
 
-	function functie (a: int, b: int) :int {
+	function functie <(a: int, b: int) :int {
+		var b: string
 	}
 
 	function main() {

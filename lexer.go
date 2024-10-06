@@ -50,14 +50,14 @@ const(
 	TOKEN_OPEN_SQUARE = iota
 	TOKEN_CLOSED_SQUARE = iota
 
-	TOKEN_TYPE_INT = iota
-	TOKEN_TYPE_FLOAT = iota
-	TOKEN_TYPE_STRING = iota
-	TOKEN_TYPE_BOOL = iota
+	TOKEN_INT = iota
+	TOKEN_FLOAT = iota
+	TOKEN_STRING = iota
+	TOKEN_BOOL = iota
 
-	TOKEN_TYPE_VAR = iota
-	TOKEN_TYPE_STRUCT = iota
-	TOKEN_TYPE_INTERFACE = iota
+	TOKEN_VAR = iota
+	TOKEN_STRUCT = iota
+	TOKEN_INTERFACE = iota
 	TOKEN_IMPLEMENT = iota
 
 	TOKEN_IF = iota
@@ -120,14 +120,14 @@ var tokenTypesString = []string{
 	"TOKEN_OPEN_SQUARE",
 	"TOKEN_CLOSED_SQUARE",
 
-	"TOKEN_TYPE_INT",
-	"TOKEN_TYPE_FLOAT",
-	"TOKEN_TYPE_STRING",
-	"TOKEN_TYPE_BOOL",
+	"TOKEN_INT",
+	"TOKEN_FLOAT",
+	"TOKEN_STRING",
+	"TOKEN_BOOL",
 
-	"TOKEN_TYPE_VAR",
-	"TOKEN_TYPE_STRUCT",
-	"TOKEN_TYPE_INTERFACE",
+	"TOKEN_VAR",
+	"TOKEN_STRUCT",
+	"TOKEN_INTERFACE",
 	"TOKEN_IMPLEMENT",
 
 	"TOKEN_IF",
@@ -148,6 +148,23 @@ var tokenTypesString = []string{
 type Token struct {
 	tokenType int
 	tokenValue string
+	position int
+	line int
+	column int
+}
+
+func (this *Lexer) newTokenWithValue(tokenType int, tokenValue string) *Token {
+	return &Token{
+		tokenType: tokenType,
+		tokenValue: tokenValue,
+		position: this.currentPosition,
+		line: this.currentLine,
+		column: this.currentColumn,
+	}
+}
+
+func (this *Lexer) newToken(tokenType int) *Token {
+	return this.newTokenWithValue(tokenType, "")
 }
 
 func (this *Token) toString() string {
@@ -186,7 +203,7 @@ func (this *Lexer) parsePlus() (error, *Token) {
 		return this.SimpleToken(TOKEN_ADD_ASSIGN)
 	}
 
-	return nil, &Token {tokenType: TOKEN_PLUS}
+	return nil, this.newToken(TOKEN_PLUS)
 }
 
 func (this *Lexer) parseMinus() (error, *Token) {
@@ -200,7 +217,7 @@ func (this *Lexer) parseMinus() (error, *Token) {
 		return this.SimpleToken(TOKEN_SUBSTRACT_ASSIGN)
 	}
 
-	return nil, &Token {tokenType: TOKEN_MINUS}
+	return nil, this.newToken(TOKEN_MINUS)
 }
 
 func (this *Lexer) parseMultiply() (error, *Token) {
@@ -214,7 +231,7 @@ func (this *Lexer) parseMultiply() (error, *Token) {
 		return this.SimpleToken(TOKEN_MULTIPLY_ASSIGN)
 	}
 
-	return nil, &Token {tokenType: TOKEN_MULTIPLY}
+	return nil, this.newToken(TOKEN_MULTIPLY)
 }
 
 func (this *Lexer) parseDivide() (error, *Token) {
@@ -228,7 +245,7 @@ func (this *Lexer) parseDivide() (error, *Token) {
 		return this.SimpleToken(TOKEN_DIVIDE_ASSIGN)
 	}
 
-	return nil, &Token {tokenType: TOKEN_DIVIDE}
+	return nil, this.newToken(TOKEN_DIVIDE)
 }
 
 func (this *Lexer) parseEqual() (error, *Token) {
@@ -242,7 +259,7 @@ func (this *Lexer) parseEqual() (error, *Token) {
 		return this.SimpleToken(TOKEN_EQUAL)
 	}
 
-	return nil, &Token {tokenType: TOKEN_ASSIGN}
+	return nil, this.newToken(TOKEN_ASSIGN)
 }
 
 func (this *Lexer) parseLess() (error, *Token) {
@@ -256,7 +273,7 @@ func (this *Lexer) parseLess() (error, *Token) {
 		return this.SimpleToken(TOKEN_LESS_EQUAL)
 	}
 
-	return nil, &Token {tokenType: TOKEN_LESS}
+	return nil, this.newToken(TOKEN_LESS)
 }
 
 func (this *Lexer) parseGreater() (error, *Token) {
@@ -270,7 +287,7 @@ func (this *Lexer) parseGreater() (error, *Token) {
 		return this.SimpleToken(TOKEN_GREATER_EQUAL)
 	}
 
-	return nil, &Token {tokenType: TOKEN_GREATER}
+	return nil, this.newToken(TOKEN_GREATER)
 }
 
 func (this *Lexer) parseNot() (error, *Token) {
@@ -284,65 +301,65 @@ func (this *Lexer) parseNot() (error, *Token) {
 		return this.SimpleToken(TOKEN_DIFFERENT)
 	}
 
-	return nil, &Token {tokenType: TOKEN_NOT}
+	return nil, this.newToken(TOKEN_NOT)
 }
 
 func (this *Lexer) getKeyword(text string) (error, *Token) {
 	switch text {
 	case "if":
-		return nil, &Token{tokenType: TOKEN_IF}
+		return nil, this.newToken(TOKEN_IF)
 	case "else":
-		return nil, &Token{tokenType: TOKEN_ELSE}
+		return nil, this.newToken(TOKEN_ELSE)
 	case "for":
-		return nil, &Token{tokenType: TOKEN_FOR}
+		return nil, this.newToken(TOKEN_FOR)
 	case "in":
-		return nil, &Token{tokenType: TOKEN_IN}
+		return nil, this.newToken(TOKEN_IN)
 	case "while":
-		return nil, &Token{tokenType: TOKEN_WHILE}
+		return nil, this.newToken(TOKEN_WHILE)
 	case "int":
-		return nil, &Token{tokenType: TOKEN_TYPE_INT}
+		return nil, this.newToken(TOKEN_INT)
 	case "float":
-		return nil, &Token{tokenType: TOKEN_TYPE_FLOAT}
+		return nil, this.newToken(TOKEN_FLOAT)
 	case "string":
-		return nil, &Token{tokenType: TOKEN_TYPE_STRING}
+		return nil, this.newToken(TOKEN_STRING)
 	case "bool":
-		return nil, &Token{tokenType: TOKEN_TYPE_BOOL}
+		return nil, this.newToken(TOKEN_BOOL)
 	case "true":
-		return nil, &Token{tokenType: TOKEN_TRUE}
+		return nil, this.newToken(TOKEN_TRUE)
 	case "false":
-		return nil, &Token{tokenType: TOKEN_FALSE}
+		return nil, this.newToken(TOKEN_FALSE)
 	case "and":
-		return nil, &Token{tokenType: TOKEN_AND}
+		return nil, this.newToken(TOKEN_AND)
 	case "or":
-		return nil, &Token{tokenType: TOKEN_OR}
+		return nil, this.newToken(TOKEN_OR)
 	case "not":
-		return nil, &Token{tokenType: TOKEN_NOT}
+		return nil, this.newToken(TOKEN_NOT)
 	case "var":
-		return nil, &Token{tokenType: TOKEN_TYPE_VAR}
+		return nil, this.newToken(TOKEN_VAR)
 	case "struct":
-		return nil, &Token{tokenType: TOKEN_TYPE_STRUCT}
+		return nil, this.newToken(TOKEN_STRUCT)
 	case "interface":
-		return nil, &Token{tokenType: TOKEN_TYPE_INTERFACE}
+		return nil, this.newToken(TOKEN_INTERFACE)
 	case "implement":
-		return nil, &Token{tokenType: TOKEN_IMPLEMENT}
+		return nil, this.newToken(TOKEN_IMPLEMENT)
 	case "module":
-		return nil, &Token{tokenType: TOKEN_MODULE}
+		return nil, this.newToken(TOKEN_MODULE)
 	case "function":
-		return nil, &Token{tokenType: TOKEN_FUNCTION}
+		return nil, this.newToken(TOKEN_FUNCTION)
 	case "return":
-		return nil, &Token{tokenType: TOKEN_RETURN}
+		return nil, this.newToken(TOKEN_RETURN)
 	case "import":
-		return nil, &Token{tokenType: TOKEN_IMPORT}
+		return nil, this.newToken(TOKEN_IMPORT)
 	case "with":
-		return nil, &Token{tokenType: TOKEN_WITH}
+		return nil, this.newToken(TOKEN_WITH)
 	case "const":
-		return nil, &Token{tokenType: TOKEN_CONST}
+		return nil, this.newToken(TOKEN_CONST)
 	case "export":
-		return nil, &Token{tokenType: TOKEN_EXPORT}
+		return nil, this.newToken(TOKEN_EXPORT)
 	case "public":
-		return nil, &Token{tokenType: TOKEN_PUBLIC}
+		return nil, this.newToken(TOKEN_PUBLIC)
 	case "private":
-		return nil, &Token{tokenType: TOKEN_PRIVATE}
+		return nil, this.newToken(TOKEN_PRIVATE)
 	}
 
 	return fmt.Errorf("Invalid keyword"), nil
@@ -376,10 +393,7 @@ func (this *Lexer) parseIdentifier() (error, *Token) {
 		return nil, keywordToken
 	}
 
-	return nil, &Token{
-		tokenType: TOKEN_IDENTIFIER,
-		tokenValue: value,
-	}
+	return nil, this.newTokenWithValue(TOKEN_IDENTIFIER, value)
 }
 
 func (this *Lexer) advance() error {
@@ -420,10 +434,7 @@ func (this *Lexer) parseString() (error, *Token) {
 	}
 
 	this.advance()
-	return nil, &Token{
-		tokenType: TOKEN_STRING_LITERAL,
-		tokenValue: value,
-	}
+	return nil, this.newTokenWithValue(TOKEN_STRING_LITERAL, value)
 }
 
 func (this *Lexer) parseNumber() (error, *Token) {
@@ -466,16 +477,10 @@ func (this *Lexer) parseNumber() (error, *Token) {
 	}
 
 	if commaFound {
-		return nil, &Token{
-			tokenType: TOKEN_FLOAT_LITERAL,
-			tokenValue: value,
-		}
+		return nil, this.newTokenWithValue(TOKEN_FLOAT_LITERAL, value)
 	}
 
-	return nil, &Token{
-		tokenType: TOKEN_INT_LITERAL,
-		tokenValue: value,
-	}
+	return nil, this.newTokenWithValue(TOKEN_INT_LITERAL, value)
 }
 
 func (this *Lexer) isIdentifierKeywordLetter(firstCharacter bool, character byte) bool {
@@ -500,16 +505,15 @@ func (this *Lexer) isIdentifierKeywordLetter(firstCharacter bool, character byte
 
 func (this *Lexer) SimpleToken(token_type int) (error, *Token) {
 	this.advance()
-	return nil, &Token{
-		tokenType: token_type,
-	}
+
+	return nil, this.newToken(token_type)
 }
 
 func (this *Lexer) next() (error, *Token) {
 	var currentCharacter byte
 	for {
 		if this.currentPosition >= len(this.text) {
-			return nil, &Token{ tokenType: TOKEN_EOF }
+			return nil, this.newToken(TOKEN_EOF)
 		}
 
 		currentCharacter = this.text[this.currentPosition]

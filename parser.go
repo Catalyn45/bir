@@ -31,11 +31,11 @@ const (
 	NODE_IMPLEMENT = iota
 	NODE_INTERFACE = iota
 	NODE_IMPORT = iota
-	NODE_TYPE_BOOL = iota
-	NODE_TYPE_INT = iota
-	NODE_TYPE_FLOAT = iota
-	NODE_TYPE_STRING = iota
-	NODE_TYPE_CUSTOM = iota
+	NODE_BOOL_TYPE = iota
+	NODE_INT_TYPE = iota
+	NODE_FLOAT_TYPE = iota
+	NODE_STRING_TYPE = iota
+	NODE_CUSTOM_TYPE = iota
 )
 
 var nodeStrings = []string {
@@ -67,11 +67,11 @@ var nodeStrings = []string {
 	"NODE_IMPLEMENT",
 	"NODE_INTERFACE",
 	"NODE_IMPORT",
-	"NODE_TYPE_BOOL",
-	"NODE_TYPE_INT",
-	"NODE_TYPE_FLOAT",
-	"NODE_TYPE_STRING",
-	"NODE_TYPE_CUSTOM",
+	"NODE_BOOL_TYPE",
+	"NODE_INT_TYPE",
+	"NODE_FLOAT_TYPE",
+	"NODE_STRING_TYPE",
+	"NODE_CUSTOM_TYPE",
 }
 
 type Node struct {
@@ -128,13 +128,13 @@ func newParser(lexer *Lexer) *Parser {
 }
 
 func (this *Parser) invalidTokenError(expectedTokenType int) error {
-	err := fmt.Errorf("Invalid token: %s, expected: %s", this.currentToken.toString(), tokenTypesString[expectedTokenType])
+	err := fmt.Errorf("Invalid token: %s, expected: %s, line: %d, column: %d", this.currentToken.toString(), tokenTypesString[expectedTokenType], this.currentToken.line, this.currentToken.column)
 
 	panic(err)
 }
 
 func  (this *Parser) unexpectedTokenError() error {
-	err := fmt.Errorf("Unexpected token: %s", this.currentToken.toString())
+	err := fmt.Errorf("Unexpected token: %s, line: %d, column: %d", this.currentToken.toString(), this.currentToken.line, this.currentToken.column)
 	panic(err)
 }
 
@@ -205,16 +205,16 @@ func (this *Parser) parseTypeSpecification() (error, *Node) {
 	}
 
 	var node *Node
-	if this.currentToken.tokenType == TOKEN_TYPE_BOOL {
-		node = &Node { nodeType: NODE_TYPE_BOOL }
-	} else if this.currentToken.tokenType == TOKEN_TYPE_INT {
-		node = &Node { nodeType: NODE_TYPE_INT }
-	} else if this.currentToken.tokenType == TOKEN_TYPE_FLOAT {
-		node = &Node { nodeType: NODE_TYPE_FLOAT }
-	} else if this.currentToken.tokenType == TOKEN_TYPE_STRING {
-		node = &Node { nodeType: NODE_TYPE_STRING }
+	if this.currentToken.tokenType == TOKEN_BOOL {
+		node = &Node { nodeType: NODE_BOOL_TYPE }
+	} else if this.currentToken.tokenType == TOKEN_INT {
+		node = &Node { nodeType: NODE_INT_TYPE }
+	} else if this.currentToken.tokenType == TOKEN_FLOAT {
+		node = &Node { nodeType: NODE_FLOAT_TYPE }
+	} else if this.currentToken.tokenType == TOKEN_STRING {
+		node = &Node { nodeType: NODE_STRING_TYPE }
 	} else if this.currentToken.tokenType == TOKEN_IDENTIFIER {
-		node = &Node { nodeType: NODE_TYPE_CUSTOM }
+		node = &Node { nodeType: NODE_CUSTOM_TYPE }
 	} else {
 		return this.unexpectedTokenError(), nil
 	}
@@ -248,7 +248,7 @@ func (this *Parser) parseTypedIdentifier() (error, *Node) {
 }
 
 func (this *Parser) parseVariableDeclaration() (error, *Node) {
-	err := this.eat(TOKEN_TYPE_VAR)
+	err := this.eat(TOKEN_VAR)
 	if err != nil {
 		return err, nil
 	}
@@ -349,7 +349,7 @@ func (this *Parser) parseIf() (error, *Node) {
 		return err, nil
 	}
 
-	err, statementsNode := this.parseBlock()
+	err, statementsNode := this.parseStatementsBlock()
 	if err != nil {
 		return err, nil
 	}
@@ -368,7 +368,7 @@ func (this *Parser) parseIf() (error, *Node) {
 		if this.currentToken.tokenType == TOKEN_IF {
 			err, elseNode = this.parseIf()
 		} else {
-			err, elseNode = this.parseBlock()
+			err, elseNode = this.parseStatementsBlock()
 		}
 
 		if err != nil {
@@ -398,7 +398,7 @@ func (this *Parser) parseWhile() (error, *Node) {
 		return err, nil
 	}
 
-	err, statementsNode := this.parseBlock()
+	err, statementsNode := this.parseStatementsBlock()
 	if err != nil {
 		return err, nil
 	}
@@ -411,7 +411,7 @@ func (this *Parser) parseWhile() (error, *Node) {
 	if this.currentToken.tokenType == TOKEN_ELSE {
 		this.advance()
 
-		err, elseNode := this.parseBlock()
+		err, elseNode := this.parseStatementsBlock()
 		if err != nil {
 			return err, nil
 		}
@@ -465,7 +465,7 @@ func (this *Parser) parseFor() (error, *Node) {
 	}
 	this.advance()
 
-	err, statementsNode := this.parseBlock()
+	err, statementsNode := this.parseStatementsBlock()
 	if err != nil {
 		return err, nil
 	}
@@ -509,7 +509,7 @@ func (this *Parser) parseStatement() (error, *Node) {
 		return this.parseConstant()
 	}
 
-	if this.currentToken.tokenType == TOKEN_TYPE_VAR {
+	if this.currentToken.tokenType == TOKEN_VAR {
 		return this.parseVariableDeclaration()
 	}
 
@@ -532,7 +532,7 @@ func (this *Parser) parseStatement() (error, *Node) {
 	return this.parseExpressionStatement()
 }
 
-func (this *Parser) parseBlock() (error, *Node) {
+func (this *Parser) parseStatementsBlock() (error, *Node) {
 	err := this.eat(TOKEN_OPEN_BRACKET)
 	if err != nil {
 		return err, nil
@@ -558,7 +558,7 @@ func (this *Parser) parseBlock() (error, *Node) {
 	return nil, statementsNode
 }
 
-func (this *Parser) parseMembers() (error, *Node) {
+func (this *Parser) parseStructBlock() (error, *Node) {
 	err := this.eat(TOKEN_OPEN_BRACKET)
 	if err != nil {
 		return err, nil
@@ -585,7 +585,7 @@ func (this *Parser) parseMembers() (error, *Node) {
 }
 
 func (this *Parser) parseStruct() (error, *Node) {
-	err := this.eat(TOKEN_TYPE_STRUCT)
+	err := this.eat(TOKEN_STRUCT)
 	if err != nil {
 		return err, nil
 	}
@@ -602,7 +602,7 @@ func (this *Parser) parseStruct() (error, *Node) {
 
 	this.advance()
 
-	err, membersNode := this.parseMembers()
+	err, membersNode := this.parseStructBlock()
 	if err != nil {
 		return err, nil
 	}
@@ -679,7 +679,7 @@ func (this *Parser) parseFunctionDeclaration() (error, *Node) {
 	return nil, functionDeclarationNode
 }
 
-func (this *Parser) parseInterfaceFunctionDeclarations() (error, *Node) {
+func (this *Parser) parseInterfaceBlock() (error, *Node) {
 	err := this.eat(TOKEN_OPEN_BRACKET)
 	if err != nil {
 		return err, nil
@@ -711,7 +711,7 @@ func (this *Parser) parseFunction() (error, *Node) {
 		return err, nil
 	}
 
-	err, statementsNode := this.parseBlock()
+	err, statementsNode := this.parseStatementsBlock()
 	if err != nil {
 		return err, nil
 	}
@@ -725,7 +725,7 @@ func (this *Parser) parseFunction() (error, *Node) {
 	return nil, functionNode
 }
 
-func (this *Parser) parseImplementFunctionDefinitions() (error, *Node) {
+func (this *Parser) parseImplementBlock() (error, *Node) {
 	err := this.eat(TOKEN_OPEN_BRACKET)
 	if err != nil {
 		return err, nil
@@ -752,7 +752,7 @@ func (this *Parser) parseImplementFunctionDefinitions() (error, *Node) {
 }
 
 func (this *Parser) parseInterface() (error, *Node) {
-	err := this.eat(TOKEN_TYPE_INTERFACE)
+	err := this.eat(TOKEN_INTERFACE)
 	if err != nil {
 		return err, nil
 	}
@@ -769,7 +769,7 @@ func (this *Parser) parseInterface() (error, *Node) {
 
 	this.advance()
 
-	err, functionDeclarationsNode := this.parseInterfaceFunctionDeclarations()
+	err, functionDeclarationsNode := this.parseInterfaceBlock()
 	if err != nil {
 		return err, nil
 	}
@@ -797,7 +797,7 @@ func (this *Parser) parseImplement() (error, *Node) {
 
 	this.advance()
 
-	err, functionDefinitionsNode := this.parseImplementFunctionDefinitions()
+	err, functionDefinitionsNode := this.parseImplementBlock()
 	if err != nil {
 		return err, nil
 	}
@@ -807,12 +807,12 @@ func (this *Parser) parseImplement() (error, *Node) {
 	return nil, implementNode
 }
 
-func (this *Parser) parseDeclaration() (error, *Node) {
-	if this.currentToken.tokenType == TOKEN_TYPE_STRUCT {
+func (this *Parser) parseExportDeclaration() (error, *Node) {
+	if this.currentToken.tokenType == TOKEN_STRUCT {
 		return this.parseStruct()
 	}
 
-	if this.currentToken.tokenType == TOKEN_TYPE_INTERFACE {
+	if this.currentToken.tokenType == TOKEN_INTERFACE {
 		return this.parseInterface()
 	}
 
@@ -831,10 +831,10 @@ func (this *Parser) parseDeclaration() (error, *Node) {
 	return this.unexpectedTokenError(), nil
 }
 
-func (this *Parser) parseDeclarations() (error, *Node) {
+func (this *Parser) parseExportBlock() (error, *Node) {
 	var declarationsNode *Node = nil
 	for currentNode := (*Node)(nil); this.currentToken.tokenType != TOKEN_CLOSED_BRACKET; {
-		err, node := this.parseDeclaration()
+		err, node := this.parseExportDeclaration()
 		if err != nil {
 			return err, nil
 		}
@@ -853,39 +853,24 @@ func (this *Parser) parseDeclarations() (error, *Node) {
 }
 
 func (this *Parser) parseExport() (error, *Node) {
-	if this.currentToken.tokenType == TOKEN_TYPE_STRUCT {
-		return this.parseStruct()
-	}
-
-	if this.currentToken.tokenType == TOKEN_TYPE_INTERFACE {
-		return this.parseInterface()
-	}
-
-	if this.currentToken.tokenType == TOKEN_IMPLEMENT {
-		return this.parseImplement()
-	}
-
-	if this.currentToken.tokenType == TOKEN_FUNCTION {
-		return this.parseFunction()
-	}
-
-	if this.currentToken.tokenType == TOKEN_CONST {
-		return this.parseConstant()
+	err := this.eat(TOKEN_EXPORT)
+	if err != nil {
+		return err, nil
 	}
 
 	if this.currentToken.tokenType == TOKEN_OPEN_BRACKET {
-		return this.parseDeclarations()
+		return this.parseExportBlock()
 	}
 
-	return this.unexpectedTokenError(), nil
+	return this.parseExportDeclaration()
 }
 
 func (this *Parser) parseRootStatement() (error, *Node) {
-	if this.currentToken.tokenType == TOKEN_TYPE_STRUCT {
+	if this.currentToken.tokenType == TOKEN_STRUCT {
 		return this.parseStruct()
 	}
 
-	if this.currentToken.tokenType == TOKEN_TYPE_INTERFACE {
+	if this.currentToken.tokenType == TOKEN_INTERFACE {
 		return this.parseInterface()
 	}
 
@@ -909,35 +894,29 @@ func (this *Parser) parseRootStatement() (error, *Node) {
 }
 
 func (this *Parser) parsePath() (error, *Node) {
-	var pathNode *Node = nil
-	var currentNode *Node = nil
-	for {
-		err := this.expectToken(TOKEN_IDENTIFIER)
+	err := this.expectToken(TOKEN_IDENTIFIER)
+	if err != nil {
+		return err, nil
+	}
+
+	pathNode := &Node {
+		nodeType: NODE_PATH,
+		token: this.currentToken,
+	}
+
+	this.advance()
+
+	var nextPathNode *Node = nil
+	if this.currentToken.tokenType == TOKEN_DOT {
+		this.advance()
+
+		err, nextPathNode = this.parsePath()
 		if err != nil {
 			return err, nil
 		}
-
-		node := &Node {
-			nodeType: NODE_PATH,
-			token: this.currentToken,
-		}
-
-		this.advance()
-
-		if currentNode == nil {
-			pathNode = node
-		} else {
-			currentNode.next = node
-		}
-
-		currentNode = node
-
-		if this.currentToken.tokenType != TOKEN_DOT {
-			break
-		}
-
-		this.advance()
 	}
+
+	pathNode.left = nextPathNode
 
 	return nil, pathNode
 }
