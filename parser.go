@@ -4,13 +4,13 @@ import "fmt"
 
 const (
 	NODE_PROGRAM     = iota
-	NODE_LINK        = iota
 	NODE_ADD         = iota
 	NODE_SUBSTRACT   = iota
 	NODE_MULTIPLY    = iota
 	NODE_DIVIDE      = iota
 	NODE_EXPRESSION  = iota
 	NODE_ASSIGNMENT  = iota
+	NODE_PATH        = iota
 	NODE_DECLARATION = iota
 	NODE_PARAMETER   = iota
 	NODE_STATEMENT   = iota
@@ -27,8 +27,6 @@ const (
 	NODE_ITERATION   = iota
 	NODE_STRUCT      = iota
 	NODE_FUNCTION_DECLARATION      = iota
-	NODE_INTERFACE_FUNCTION_DELCARATION      = iota
-	NODE_IMPLEMENT_FUNCTION_DEFINITION = iota
 	NODE_FUNCTION = iota
 	NODE_IMPLEMENT = iota
 	NODE_INTERFACE = iota
@@ -42,13 +40,13 @@ const (
 
 var nodeStrings = []string {
 	"NODE_PROGRAM",
-	"NODE_LINK",
 	"NODE_ADD",
 	"NODE_SUBSTRACT",
 	"NODE_MULTIPLY",
 	"NODE_DIVIDE",
 	"NODE_EXPRESSION",
 	"NODE_ASSIGNMENT",
+	"NODE_PATH",
 	"NODE_DECLARATION",
 	"NODE_PARAMETER",
 	"NODE_STATEMENT",
@@ -65,8 +63,6 @@ var nodeStrings = []string {
 	"NODE_ITERATION",
 	"NODE_STRUCT",
 	"NODE_FUNCTION_DECLARATION",
-	"NODE_INTERFACE_FUNCTION_DELCARATION",
-	"NODE_IMPLEMENT_FUNCTION_DEFINITION",
 	"NODE_FUNCTION",
 	"NODE_IMPLEMENT",
 	"NODE_INTERFACE",
@@ -83,10 +79,16 @@ type Node struct {
 	token    *Token
 	left     *Node
 	right    *Node
+	next     *Node
 }
 
 func (this *Node) ToString() string {
-	return fmt.Sprintf("node: %s", nodeStrings[this.nodeType])
+	tokenString := ""
+	if this.token != nil {
+		tokenString = this.token.toString()
+	}
+
+	return fmt.Sprintf("node: %s, token: %s", nodeStrings[this.nodeType], tokenString)
 }
 
 func (this *Node) Dump(indent int) {
@@ -106,6 +108,10 @@ func (this *Node) Dump(indent int) {
 
 	if this.right != nil {
 		this.right.Dump(indent + 4)
+	}
+
+	if this.next != nil {
+		this.next.Dump(indent)
 	}
 }
 
@@ -532,31 +538,24 @@ func (this *Parser) parseBlock() (error, *Node) {
 		return err, nil
 	}
 
-	root := &Node{
-		nodeType: NODE_STATEMENT,
-	}
-	currentNode := root
-
-	for this.currentToken.tokenType != TOKEN_CLOSED_BRACKET {
+	var statementsNode *Node = nil
+	for currentNode := (*Node)(nil); this.currentToken.tokenType != TOKEN_CLOSED_BRACKET; {
 		err, node := this.parseStatement()
 		if err != nil {
 			return err, nil
 		}
 
-		if currentNode.left == nil {
-			currentNode.left = node
+		if currentNode == nil {
+			statementsNode = node
 		} else {
-			currentNode.right = &Node{
-				nodeType: NODE_LINK,
-				left:     node,
-			}
-
-			currentNode = node
+			currentNode.next = node
 		}
+
+		currentNode = node
 	}
 	this.advance()
 
-	return nil, root
+	return nil, statementsNode
 }
 
 func (this *Parser) parseMembers() (error, *Node) {
@@ -565,31 +564,24 @@ func (this *Parser) parseMembers() (error, *Node) {
 		return err, nil
 	}
 
-	root := &Node{
-		nodeType: NODE_MEMBER,
-	}
-	currentNode := root
-
-	for this.currentToken.tokenType != TOKEN_CLOSED_BRACKET {
+	var membersNode *Node = nil
+	for currentNode := (*Node)(nil); this.currentToken.tokenType != TOKEN_CLOSED_BRACKET; {
 		err, node := this.parseTypedIdentifier()
 		if err != nil {
 			return err, nil
 		}
 
-		if currentNode.left == nil {
-			currentNode.left = node
+		if currentNode == nil {
+			membersNode = node
 		} else {
-			currentNode.right = &Node{
-				nodeType: NODE_LINK,
-				left:     node,
-			}
-
-			currentNode = node
+			currentNode.next = node
 		}
+
+		currentNode = node
 	}
 	this.advance()
 
-	return nil, root
+	return nil, membersNode
 }
 
 func (this *Parser) parseStruct() (error, *Node) {
@@ -626,27 +618,20 @@ func (this *Parser) parseFunctionParameters() (error, *Node) {
 		return err, nil
 	}
 
-	root := &Node{
-		nodeType: NODE_PROGRAM,
-	}
-	currentNode := root
-
-	for this.currentToken.tokenType != TOKEN_CLOSED_PARANTHESIS {
+	var parametersNode *Node = nil
+	for currentNode := (*Node)(nil); this.currentToken.tokenType != TOKEN_CLOSED_PARANTHESIS; {
 		err, node := this.parseTypedIdentifier()
 		if err != nil {
 			return err, nil
 		}
 
-		if currentNode.left == nil {
-			currentNode.left = node
+		if currentNode == nil {
+			parametersNode = node
 		} else {
-			currentNode.right = &Node{
-				nodeType: NODE_LINK,
-				left:     node,
-			}
-
-			currentNode = node
+			currentNode.next = node
 		}
+
+		currentNode = node
 
 		if this.currentToken.tokenType == TOKEN_COMMA {
 			this.advance()
@@ -654,7 +639,7 @@ func (this *Parser) parseFunctionParameters() (error, *Node) {
 	}
 	this.advance()
 
-	return nil, root
+	return nil, parametersNode
 }
 
 func (this *Parser) parseFunctionDeclaration() (error, *Node) {
@@ -691,7 +676,7 @@ func (this *Parser) parseFunctionDeclaration() (error, *Node) {
 	functionDeclarationNode.left = functionTypeNode
 	functionDeclarationNode.right = parametersNode
 
-	return nil, parametersNode
+	return nil, functionDeclarationNode
 }
 
 func (this *Parser) parseInterfaceFunctionDeclarations() (error, *Node) {
@@ -700,31 +685,24 @@ func (this *Parser) parseInterfaceFunctionDeclarations() (error, *Node) {
 		return err, nil
 	}
 
-	root := &Node{
-		nodeType: NODE_INTERFACE_FUNCTION_DELCARATION,
-	}
-	currentNode := root
-
-	for this.currentToken.tokenType != TOKEN_CLOSED_BRACKET {
+	var functionDeclarationsNode *Node = nil
+	for currentNode := (*Node)(nil); this.currentToken.tokenType != TOKEN_CLOSED_BRACKET; {
 		err, node := this.parseFunctionDeclaration()
 		if err != nil {
 			return err, nil
 		}
 
-		if currentNode.left == nil {
-			currentNode.left = node
+		if currentNode == nil {
+			functionDeclarationsNode = node
 		} else {
-			currentNode.right = &Node{
-				nodeType: NODE_LINK,
-				left:     node,
-			}
-
-			currentNode = node
+			currentNode.next = node
 		}
+
+		currentNode = node
 	}
 	this.advance()
 
-	return nil, root
+	return nil, functionDeclarationsNode
 }
 
 func (this *Parser) parseFunction() (error, *Node) {
@@ -753,32 +731,24 @@ func (this *Parser) parseImplementFunctionDefinitions() (error, *Node) {
 		return err, nil
 	}
 
-	root := &Node{
-		nodeType: NODE_IMPLEMENT_FUNCTION_DEFINITION,
-	}
-	currentNode := root
-
-	for this.currentToken.tokenType != TOKEN_CLOSED_BRACKET {
+	var functionsNode *Node = nil
+	for currentNode := (*Node)(nil); this.currentToken.tokenType != TOKEN_CLOSED_BRACKET; {
 		err, node := this.parseFunction()
 		if err != nil {
 			return err, nil
 		}
 
-		if currentNode.left == nil {
-			currentNode.left = node
+		if currentNode == nil {
+			functionsNode = node
 		} else {
-			currentNode.right = &Node{
-				nodeType: NODE_LINK,
-				left:     node,
-			}
-
-			currentNode = node
+			currentNode.next = node
 		}
-	}
 
+		currentNode = node
+	}
 	this.advance()
 
-	return nil, root
+	return nil, functionsNode
 }
 
 func (this *Parser) parseInterface() (error, *Node) {
@@ -862,31 +832,24 @@ func (this *Parser) parseDeclaration() (error, *Node) {
 }
 
 func (this *Parser) parseDeclarations() (error, *Node) {
-	root := &Node {
-		nodeType: NODE_STATEMENT,
-	}
-
-	currentNode := root
-
-	for this.currentToken.tokenType != TOKEN_CLOSED_BRACKET {
+	var declarationsNode *Node = nil
+	for currentNode := (*Node)(nil); this.currentToken.tokenType != TOKEN_CLOSED_BRACKET; {
 		err, node := this.parseDeclaration()
 		if err != nil {
 			return err, nil
 		}
 
-		if currentNode.left == nil {
-			currentNode.left = node
+		if currentNode == nil {
+			declarationsNode = node
 		} else {
-			currentNode.right = &Node{
-				nodeType: NODE_LINK,
-				left:     node,
-			}
-
-			currentNode = node
+			currentNode.next = node
 		}
-	}
 
-	return nil, root
+		currentNode = node
+	}
+	this.advance()
+
+	return nil, declarationsNode
 }
 
 func (this *Parser) parseExport() (error, *Node) {
@@ -945,18 +908,9 @@ func (this *Parser) parseRootStatement() (error, *Node) {
 	return this.unexpectedTokenError(), nil
 }
 
-func (this *Parser) parseModule() (error, *Node) {
-	err := this.eat(TOKEN_MODULE)
-	if err != nil {
-		return err, nil
-	}
-
-	root := &Node {
-		nodeType: NODE_MODULE,
-	}
-
-	currentNode := root
-
+func (this *Parser) parsePath() (error, *Node) {
+	var pathNode *Node = nil
+	var currentNode *Node = nil
 	for {
 		err := this.expectToken(TOKEN_IDENTIFIER)
 		if err != nil {
@@ -964,29 +918,47 @@ func (this *Parser) parseModule() (error, *Node) {
 		}
 
 		node := &Node {
-			nodeType: NODE_MODULE,
+			nodeType: NODE_PATH,
 			token: this.currentToken,
 		}
 
 		this.advance()
 
-		if currentNode.left == nil {
-			currentNode.left = node
+		if currentNode == nil {
+			pathNode = node
 		} else {
-			currentNode.right = &Node{
-				nodeType: NODE_LINK,
-				left:     node,
-			}
-
-			currentNode = node
+			currentNode.next = node
 		}
+
+		currentNode = node
+
 		if this.currentToken.tokenType != TOKEN_DOT {
 			break
 		}
+
 		this.advance()
 	}
 
-	return nil, root
+	return nil, pathNode
+}
+
+func (this *Parser) parseModule() (error, *Node) {
+	err := this.eat(TOKEN_MODULE)
+	if err != nil {
+		return err, nil
+	}
+
+	err, pathNode := this.parsePath()
+	if err != nil {
+		return err, nil
+	}
+
+	moduleNode := &Node {
+		nodeType: NODE_MODULE,
+		left: pathNode,
+	}
+
+	return nil, moduleNode
 }
 
 func (this *Parser) parseImport() (error, *Node) {
@@ -995,67 +967,34 @@ func (this *Parser) parseImport() (error, *Node) {
 		return err, nil
 	}
 
-	root := &Node {
+	err, pathNode := this.parsePath()
+	if err != nil {
+		return err, nil
+	}
+
+	importNode := &Node {
 		nodeType: NODE_IMPORT,
+		left: pathNode,
 	}
 
-	currentNode := root
-
-	for {
-		err := this.expectToken(TOKEN_IDENTIFIER)
-		if err != nil {
-			return err, nil
-		}
-
-		node := &Node {
-			nodeType: NODE_IMPORT,
-			token: this.currentToken,
-		}
-
-		this.advance()
-
-		if currentNode.left == nil {
-			currentNode.left = node
-		} else {
-			currentNode.right = &Node{
-				nodeType: NODE_LINK,
-				left:     node,
-			}
-
-			currentNode = node
-		}
-		if this.currentToken.tokenType != TOKEN_DOT {
-			break
-		}
-		this.advance()
-	}
-
-	return nil, root
+	return nil, importNode
 }
 
 func (this *Parser) parseImports() (error, *Node) {
-	importsNode := &Node {
-		nodeType: NODE_IMPORT,
-	}
-
-	currentNode := importsNode
-
-	for this.currentToken.tokenType == TOKEN_IMPORT {
+	var importsNode *Node = nil
+	for currentNode := (*Node)(nil); this.currentToken.tokenType == TOKEN_IMPORT; {
 		err, node := this.parseImport()
 		if err != nil {
 			return err, nil
 		}
 
-		if currentNode.left == nil {
-			currentNode.left = node
+		if currentNode == nil {
+			importsNode = node
 		} else {
-			currentNode.right = &Node{
-				nodeType: NODE_LINK,
-				left:     node,
-			}
-
-			currentNode = node
+			currentNode.next = node
 		}
+
+		currentNode = node
 	}
 
 	return nil, importsNode
@@ -1077,28 +1016,20 @@ func (this *Parser) Parse() (error, *Node) {
 		return err, nil
 	}
 
-	statementsNode := &Node {
-		nodeType: NODE_STATEMENT,
-	}
-
-	currentNode := statementsNode
-
-	for this.currentToken.tokenType != TOKEN_EOF {
+	var statementsNode *Node = nil
+	for currentNode := (*Node)(nil); this.currentToken.tokenType != TOKEN_EOF; {
 		err, node := this.parseRootStatement()
 		if err != nil {
 			return err, nil
 		}
 
-		if currentNode.left == nil {
-			currentNode.left = node
+		if currentNode == nil {
+			statementsNode = node
 		} else {
-			currentNode.right = &Node{
-				nodeType: NODE_LINK,
-				left:     node,
-			}
-
-			currentNode = node
+			currentNode.next = node
 		}
+
+		currentNode = node
 	}
 
 	programMetadataNode := &Node {

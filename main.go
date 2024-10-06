@@ -8,9 +8,9 @@ func main() {
 	import c
 
 	struct a {
-		a: int
-		b: bool
-		b: float
+		bla: int
+		bli: bool
+		blu: float
 	}
 
 	interface I {
