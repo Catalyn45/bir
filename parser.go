@@ -4,10 +4,6 @@ import "fmt"
 
 const (
 	NODE_PROGRAM     = iota
-	NODE_ADD         = iota
-	NODE_SUBSTRACT   = iota
-	NODE_MULTIPLY    = iota
-	NODE_DIVIDE      = iota
 	NODE_EXPRESSION  = iota
 	NODE_ASSIGNMENT  = iota
 	NODE_PATH        = iota
@@ -39,14 +35,14 @@ const (
 	NODE_FLOAT_TYPE = iota
 	NODE_STRING_TYPE = iota
 	NODE_CUSTOM_TYPE = iota
+	NODE_BINARY_EXPRESSION = iota
+	NODE_NOT = iota
+	NODE_CALL = iota
+	NODE_MEMBER_ACCESS = iota
 )
 
 var nodeStrings = []string {
 	"NODE_PROGRAM",
-	"NODE_ADD",
-	"NODE_SUBSTRACT",
-	"NODE_MULTIPLY",
-	"NODE_DIVIDE",
 	"NODE_EXPRESSION",
 	"NODE_ASSIGNMENT",
 	"NODE_PATH",
@@ -78,6 +74,10 @@ var nodeStrings = []string {
 	"NODE_FLOAT_TYPE",
 	"NODE_STRING_TYPE",
 	"NODE_CUSTOM_TYPE",
+	"NODE_BINARY_EXPRESSION",
+	"NODE_NOT",
+	"NODE_CALL",
+	"NODE_MEMBER_ACCESS",
 }
 
 type Node struct {
@@ -210,26 +210,21 @@ func (this *Parser) advance() error {
 	return nil
 }
 
-func (this *Parser) parsePrimary() (error, *Node) {
-	var primaryNode *Node
+func (this *Parser) parseLiteral() (error, *Node) {
+	var literalNode *Node
 	if this.currentToken.tokenType == TOKEN_INT_LITERAL {
-		primaryNode = &Node{
+		literalNode = &Node{
 			nodeType: NODE_INT,
 			token: this.currentToken,
 		}
 	} else if this.currentToken.tokenType == TOKEN_FLOAT_LITERAL {
-		primaryNode = &Node{
+		literalNode = &Node{
 			nodeType: NODE_FLOAT,
 			token: this.currentToken,
 		}
 	} else if this.currentToken.tokenType == TOKEN_STRING_LITERAL {
-		primaryNode = &Node{
+		literalNode = &Node{
 			nodeType: NODE_STRING,
-			token: this.currentToken,
-		}
-	} else if this.currentToken.tokenType == TOKEN_IDENTIFIER {
-		primaryNode = &Node{
-			nodeType: NODE_VARIABLE,
 			token: this.currentToken,
 		}
 	} else {
@@ -238,11 +233,289 @@ func (this *Parser) parsePrimary() (error, *Node) {
 
 	this.advance()
 
-	return nil, primaryNode
+	return nil, literalNode
+}
+
+func (this *Parser) parsePrimary() (error, *Node) {
+	if this.currentToken.tokenType == TOKEN_OPEN_PARANTHESIS {
+		this.advance()
+
+		err, primaryNode := this.parseExpression()
+		if err != nil {
+			return err, nil
+		}
+
+		err = this.eat(TOKEN_CLOSED_PARANTHESIS)
+		if err != nil {
+			return err, nil
+		}
+
+		return nil, primaryNode
+	} else if this.currentToken.tokenType == TOKEN_IDENTIFIER {
+		primaryNode := &Node{
+			nodeType: NODE_VARIABLE,
+			token: this.currentToken,
+		}
+
+		this.advance()
+
+		return nil, primaryNode
+	}
+
+	return this.parseLiteral()
+}
+
+func (this *Parser) parseArguments() (error, *Node) {
+	err := this.eat(TOKEN_OPEN_PARANTHESIS)
+	if err != nil {
+		return err, nil
+	}
+
+	var argumentsNode *Node = nil
+	for currentNode := (*Node)(nil); this.currentToken.tokenType != TOKEN_CLOSED_PARANTHESIS; {
+		err, node := this.parseExpression()
+		if err != nil {
+			return err, nil
+		}
+
+		if currentNode == nil {
+			argumentsNode = node
+		} else {
+			currentNode.next = node
+		}
+
+		currentNode = node
+
+		if this.currentToken.tokenType == TOKEN_COMMA {
+			this.advance()
+		}
+	}
+	this.advance()
+
+	return nil, argumentsNode
+}
+
+func (this *Parser) parsePostfix() (error, *Node) {
+	err, left := this.parsePrimary()
+	if err != nil {
+		return err, nil
+	}
+
+	for {
+		if this.currentToken.tokenType == TOKEN_OPEN_PARANTHESIS{
+			err, arguments := this.parseArguments()
+			if err != nil {
+				return err, nil
+			}
+
+			return nil, &Node{
+				nodeType: NODE_CALL,
+				left: left,
+				right: arguments,
+			}
+		} else if this.currentToken.tokenType == TOKEN_DOT {
+			this.advance()
+
+			if this.currentToken.tokenType != TOKEN_IDENTIFIER {
+				return this.invalidTokenError(TOKEN_IDENTIFIER), nil
+			}
+
+			left = &Node{
+				nodeType: NODE_MEMBER_ACCESS,
+				token: this.currentToken,
+				left: left,
+			}
+
+			this.advance()
+		} else {
+			break
+		}
+	}
+
+	return nil, left
+}
+
+func (this *Parser) parseUnary() (error, *Node) {
+	if this.currentToken.tokenType == TOKEN_NOT {
+		this.advance()
+
+		err, expression := this.parseUnary()
+		if err != nil {
+			return err, nil
+		}
+
+		return nil, &Node {
+			nodeType: NODE_NOT,
+			left: expression,
+		}
+	}
+
+	return this.parsePostfix()
+}
+
+func (this *Parser) parseMultiplicative() (error, *Node) {
+	err, left := this.parseUnary()
+	if err != nil {
+		return err, nil
+	}
+
+	for currentToken := this.currentToken;
+		currentToken.tokenType == TOKEN_MULTIPLY || currentToken.tokenType == TOKEN_DIVIDE;
+		currentToken = this.currentToken {
+		this.advance()
+
+		err, right := this.parseUnary()
+		if err != nil {
+			return err, nil
+		}
+
+		left = &Node {
+			nodeType: NODE_BINARY_EXPRESSION,
+			token: currentToken,
+			left: left,
+			right: right,
+		}
+	}
+
+	return nil, left
+}
+
+func (this *Parser) parseAdditive() (error, *Node) {
+	err, left := this.parseMultiplicative()
+	if err != nil {
+		return err, nil
+	}
+
+	for currentToken := this.currentToken;
+		currentToken.tokenType == TOKEN_PLUS || currentToken.tokenType == TOKEN_MINUS;
+		currentToken = this.currentToken {
+		this.advance()
+
+		err, right := this.parseMultiplicative()
+		if err != nil {
+			return err, nil
+		}
+
+		left = &Node {
+			nodeType: NODE_BINARY_EXPRESSION,
+			token: currentToken,
+			left: left,
+			right: right,
+		}
+	}
+
+	return nil, left
+}
+
+func (this *Parser) parseRelational() (error, *Node) {
+	err, left := this.parseAdditive()
+	if err != nil {
+		return err, nil
+	}
+
+	for currentToken := this.currentToken;
+		(currentToken.tokenType == TOKEN_GREATER ||
+			currentToken.tokenType == TOKEN_GREATER_EQUAL ||
+			currentToken.tokenType == TOKEN_LESS ||
+			currentToken.tokenType == TOKEN_LESS_EQUAL);
+		currentToken = this.currentToken {
+		this.advance()
+
+		err, right := this.parseAdditive()
+		if err != nil {
+			return err, nil
+		}
+
+		left = &Node {
+			nodeType: NODE_BINARY_EXPRESSION,
+			token: currentToken,
+			left: left,
+			right: right,
+		}
+	}
+
+	return nil, left
+}
+
+func (this *Parser) parseEquality() (error, *Node) {
+	err, left := this.parseRelational()
+	if err != nil {
+		return err, nil
+	}
+
+	for currentToken := this.currentToken;
+		currentToken.tokenType == TOKEN_EQUAL || currentToken.tokenType == TOKEN_DIFFERENT;
+		currentToken = this.currentToken {
+		this.advance()
+
+		err, right := this.parseRelational()
+		if err != nil {
+			return err, nil
+		}
+
+		left = &Node {
+			nodeType: NODE_BINARY_EXPRESSION,
+			token: currentToken,
+			left: left,
+			right: right,
+		}
+	}
+
+	return nil, left
+}
+
+func (this *Parser) parseAnd() (error, *Node) {
+	err, left := this.parseEquality()
+	if err != nil {
+		return err, nil
+	}
+
+	for currentToken := this.currentToken; currentToken.tokenType == TOKEN_AND; currentToken = this.currentToken {
+		this.advance()
+
+		err, right := this.parseEquality()
+		if err != nil {
+			return err, nil
+		}
+
+		left = &Node {
+			nodeType: NODE_BINARY_EXPRESSION,
+			token: currentToken,
+			left: left,
+			right: right,
+		}
+	}
+
+	return nil, left
+}
+
+func (this *Parser) parseOr() (error, *Node) {
+	err, left := this.parseAnd()
+	if err != nil {
+		return err, nil
+	}
+
+	for currentToken := this.currentToken; currentToken.tokenType == TOKEN_OR; currentToken = this.currentToken {
+		this.advance()
+
+		err, right := this.parseAnd()
+		if err != nil {
+			return err, nil
+		}
+
+		left = &Node {
+			nodeType: NODE_BINARY_EXPRESSION,
+			token: currentToken,
+			left: left,
+			right: right,
+		}
+	}
+
+	return nil, left
 }
 
 func (this *Parser) parseExpression() (error, *Node) {
-	return this.parsePrimary()
+	return this.parseOr()
 }
 
 func (this *Parser) parseExpressionStatement() (error, *Node) {
@@ -565,15 +838,20 @@ func (this *Parser) parseReturn() (error, *Node) {
 		return err, nil
 	}
 
+	returnNode := &Node {
+		nodeType: NODE_RETURN,
+	}
+
+	if this.currentToken.tokenType == TOKEN_CLOSED_BRACKET {
+		return nil, returnNode
+	}
+
 	err, expressionNode := this.parseExpression()
 	if err != nil {
 		return err, nil
 	}
 
-	returnNode := &Node {
-		nodeType: NODE_RETURN,
-		left: expressionNode,
-	}
+	returnNode.left = expressionNode
 
 	return nil, returnNode
 }
