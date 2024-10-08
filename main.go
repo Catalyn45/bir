@@ -1,31 +1,14 @@
 package main
 
+import "os"
+
 func main() {
-	var text = `
-	module a.b
-
-	import b.c
-	import c
-
-	struct a {
-		bla: int
-		bli: bool
-		blu: float
+	data, err := os.ReadFile("example.bir")
+	if err != nil {
+		panic(err)
 	}
 
-	interface I {
-		function f()
-		function fu(a: bool, b: bool)
-	}
-
-	function functie <(a: int, b: int) :int {
-		var b: string
-	}
-
-	function main() {
-		var a: int
-	}
-`
+	text := string(data)
 
 	lexer := newLexer(text)
 	parser := newParser(lexer)
@@ -35,5 +18,5 @@ func main() {
 		panic(err)
 	}
 
-	root.Dump(4)
+	root.Dump(0, &[]int{}, "")
 }

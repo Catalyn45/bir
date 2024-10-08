@@ -91,27 +91,64 @@ func (this *Node) ToString() string {
 	return fmt.Sprintf("node: %s, token: %s", nodeStrings[this.nodeType], tokenString)
 }
 
-func (this *Node) Dump(indent int) {
+func contains(arr []int, target int) bool {
+    for _, v := range arr {
+        if v == target {
+            return true
+        }
+    }
+    return false
+}
+
+func clone(arr []int) []int {
+    // Create a new slice of the same length
+    clone := make([]int, len(arr))
+
+    // Copy the original slice to the new one
+    copy(clone, arr)
+
+	return clone
+}
+
+const (
+	emptySymbol = " "
+	barSymbol = "│"
+	normalNodeSymbol = "└─> "
+	continousNodeSymbol = "├─> "
+	nextNodeSymbol = " ─> "
+)
+
+func (this *Node) Dump(indent int, bars *[]int, nodeSymbol string) {
 	for i := 0; i < indent - 4; i++ {
-		fmt.Print(" ")
+		if contains(*bars, i) {
+			fmt.Print(barSymbol)
+		} else {
+			fmt.Print(emptySymbol)
+		}
 	}
 
-    if indent > 0 {
-        fmt.Print("└── ")
-    }
+	fmt.Print(nodeSymbol)
 
 	fmt.Println(this.ToString())
 
+	clonedBars := clone(*bars)
+
+	leftNodeCharacter := normalNodeSymbol
+	if this.right != nil {
+		clonedBars = append(clonedBars, indent)
+		leftNodeCharacter = continousNodeSymbol
+	}
+
 	if this.left != nil {
-		this.left.Dump(indent + 4)
+		this.left.Dump(indent + 4, &clonedBars, leftNodeCharacter)
 	}
 
 	if this.right != nil {
-		this.right.Dump(indent + 4)
+		this.right.Dump(indent + 4, bars, normalNodeSymbol)
 	}
 
 	if this.next != nil {
-		this.next.Dump(indent)
+		this.next.Dump(indent, bars, nextNodeSymbol)
 	}
 }
 
