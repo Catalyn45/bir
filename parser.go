@@ -18,6 +18,9 @@ const (
 	NODE_IF          = iota
 	NODE_BRANCH      = iota
 	NODE_VARIABLE    = iota
+	NODE_INT         = iota
+	NODE_FLOAT       = iota
+	NODE_STRING      = iota
 	NODE_WHILE       = iota
 	NODE_FOR         = iota
 	NODE_METADATA    = iota
@@ -54,6 +57,9 @@ var nodeStrings = []string {
 	"NODE_IF",
 	"NODE_BRANCH",
 	"NODE_VARIABLE",
+	"NODE_INT",
+	"NODE_FLOAT",
+	"NODE_STRING",
 	"NODE_WHILE",
 	"NODE_FOR",
 	"NODE_METADATA",
@@ -204,8 +210,39 @@ func (this *Parser) advance() error {
 	return nil
 }
 
+func (this *Parser) parsePrimary() (error, *Node) {
+	var primaryNode *Node
+	if this.currentToken.tokenType == TOKEN_INT_LITERAL {
+		primaryNode = &Node{
+			nodeType: NODE_INT,
+			token: this.currentToken,
+		}
+	} else if this.currentToken.tokenType == TOKEN_FLOAT_LITERAL {
+		primaryNode = &Node{
+			nodeType: NODE_FLOAT,
+			token: this.currentToken,
+		}
+	} else if this.currentToken.tokenType == TOKEN_STRING_LITERAL {
+		primaryNode = &Node{
+			nodeType: NODE_STRING,
+			token: this.currentToken,
+		}
+	} else if this.currentToken.tokenType == TOKEN_IDENTIFIER {
+		primaryNode = &Node{
+			nodeType: NODE_VARIABLE,
+			token: this.currentToken,
+		}
+	} else {
+		return this.unexpectedTokenError(), nil
+	}
+
+	this.advance()
+
+	return nil, primaryNode
+}
+
 func (this *Parser) parseExpression() (error, *Node) {
-	return fmt.Errorf("Expression parsing not implemented yet"), nil
+	return this.parsePrimary()
 }
 
 func (this *Parser) parseExpressionStatement() (error, *Node) {
@@ -312,7 +349,7 @@ func (this *Parser) parseVariableDeclaration() (error, *Node) {
 	}
 
 	var expressionNode *Node = nil
-	if this.currentToken.tokenType == TOKEN_EQUAL {
+	if this.currentToken.tokenType == TOKEN_ASSIGN {
 		this.advance()
 
 		var err error
@@ -359,7 +396,7 @@ func (this *Parser) parseConstant() (error, *Node) {
 		}
 	}
 
-	err = this.eat(TOKEN_EQUAL)
+	err = this.eat(TOKEN_ASSIGN)
 	if err != nil {
 		return err, nil
 	}

@@ -19,6 +19,7 @@ implement Node {
     }
 
     function add(a: int, b: int): int {
+        return a
     }
 }
 
@@ -26,6 +27,6 @@ function showMe(s: Displayable) {
 }
 
 function main() {
-    var first: int
-    var second: int
+    var first : int = 10
+    var second : int = 10
 }
