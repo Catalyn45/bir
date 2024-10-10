@@ -27,6 +27,7 @@ const (
 	NODE_STRUCT      = iota
 	NODE_FUNCTION_DECLARATION      = iota
 	NODE_FUNCTION = iota
+	NODE_FUNCTION_METADATA = iota
 	NODE_IMPLEMENT = iota
 	NODE_INTERFACE = iota
 	NODE_IMPORT = iota
@@ -38,7 +39,9 @@ const (
 	NODE_BINARY_EXPRESSION = iota
 	NODE_NOT = iota
 	NODE_CALL = iota
+	NODE_CALL_METADATA = iota
 	NODE_MEMBER_ACCESS = iota
+	NODE_INDEX = iota
 )
 
 var nodeStrings = []string {
@@ -66,6 +69,7 @@ var nodeStrings = []string {
 	"NODE_STRUCT",
 	"NODE_FUNCTION_DECLARATION",
 	"NODE_FUNCTION",
+	"NODE_FUNCTION_METADATA",
 	"NODE_IMPLEMENT",
 	"NODE_INTERFACE",
 	"NODE_IMPORT",
@@ -77,7 +81,9 @@ var nodeStrings = []string {
 	"NODE_BINARY_EXPRESSION",
 	"NODE_NOT",
 	"NODE_CALL",
+	"NODE_CALL_METADATA",
 	"NODE_MEMBER_ACCESS",
+	"NODE_INDEX",
 }
 
 type Node struct {
@@ -302,6 +308,18 @@ func (this *Parser) parsePostfix() (error, *Node) {
 	}
 
 	for {
+		var templateNode *Node = nil
+		if this.currentToken.tokenType == TOKEN_LESS {
+			err, templateNode = this.parseTemplate() 
+			if err != nil {
+				return err, nil
+			}
+
+			if this.currentToken.tokenType != TOKEN_OPEN_PARANTHESIS {
+				return this.invalidTokenError(TOKEN_OPEN_PARANTHESIS), nil
+			}
+		}
+
 		if this.currentToken.tokenType == TOKEN_OPEN_PARANTHESIS{
 			err, arguments := this.parseArguments()
 			if err != nil {
@@ -311,13 +329,18 @@ func (this *Parser) parsePostfix() (error, *Node) {
 			return nil, &Node{
 				nodeType: NODE_CALL,
 				left: left,
-				right: arguments,
+				right: &Node{
+					nodeType: NODE_CALL_METADATA,
+					left: templateNode,
+					right: arguments,
+				},
 			}
 		} else if this.currentToken.tokenType == TOKEN_DOT {
 			this.advance()
 
-			if this.currentToken.tokenType != TOKEN_IDENTIFIER {
-				return this.invalidTokenError(TOKEN_IDENTIFIER), nil
+			err := this.expectToken(TOKEN_IDENTIFIER)
+			if err != nil {
+				return err, nil
 			}
 
 			left = &Node{
@@ -327,6 +350,24 @@ func (this *Parser) parsePostfix() (error, *Node) {
 			}
 
 			this.advance()
+		} else if this.currentToken.tokenType == TOKEN_OPEN_SQUARE {
+			this.advance()
+
+			err, expression := this.parseExpression()
+			if err != nil {
+				return err, nil
+			}
+
+			left = &Node {
+				nodeType: NODE_INDEX,
+				left: left,
+				right: expression,
+			}
+
+			err = this.eat(TOKEN_CLOSED_SQUARE)
+			if err != nil {
+				return err, nil
+			}
 		} else {
 			break
 		}
@@ -545,12 +586,38 @@ func (this *Parser) parseExpressionStatement() (error, *Node) {
 	return nil, assignmentNode
 }
 
-func (this *Parser) parseTypeSpecification() (error, *Node) {
-	err := this.eat(TOKEN_COLONS)
+func (this *Parser) parseTemplate() (error, *Node) {
+	err := this.eat(TOKEN_LESS)
 	if err != nil {
 		return err, nil
 	}
 
+	var templateNode *Node = nil
+	for currentNode := (*Node)(nil); this.currentToken.tokenType != TOKEN_GREATER; {
+		err, node := this.parseType()
+		if err != nil {
+			return err, nil
+		}
+
+		if currentNode == nil {
+			templateNode = node
+		} else {
+			currentNode.next = node
+		}
+
+		currentNode = node
+
+		if this.currentToken.tokenType == TOKEN_COMMA {
+			this.advance()
+		}
+	}
+
+	this.advance()
+
+	return nil, templateNode
+}
+
+func (this *Parser) parseType() (error, *Node) {
 	var node *Node
 	if this.currentToken.tokenType == TOKEN_BOOL {
 		node = &Node { nodeType: NODE_BOOL_TYPE }
@@ -561,14 +628,32 @@ func (this *Parser) parseTypeSpecification() (error, *Node) {
 	} else if this.currentToken.tokenType == TOKEN_STRING {
 		node = &Node { nodeType: NODE_STRING_TYPE }
 	} else if this.currentToken.tokenType == TOKEN_IDENTIFIER {
-		node = &Node { nodeType: NODE_CUSTOM_TYPE }
+		node = &Node { nodeType: NODE_CUSTOM_TYPE, token: this.currentToken }
 	} else {
 		return this.unexpectedTokenError(), nil
 	}
 
 	this.advance()
 
+	if this.currentToken.tokenType == TOKEN_LESS {
+		err, templateNode := this.parseTemplate()
+		if err != nil {
+			return err, nil
+		}
+
+		node.left = templateNode
+	}
+
 	return nil, node
+}
+
+func (this *Parser) parseTypeSpecification() (error, *Node) {
+	err := this.eat(TOKEN_COLONS)
+	if err != nil {
+		return err, nil
+	}
+
+	return this.parseType()
 }
 
 func (this *Parser) parseTypedIdentifier() (error, *Node) {
@@ -954,12 +1039,21 @@ func (this *Parser) parseStruct() (error, *Node) {
 
 	this.advance()
 
+	var templateNode *Node = nil
+	if this.currentToken.tokenType == TOKEN_LESS {
+		err, templateNode = this.parseTemplate()
+		if err != nil {
+			return err, nil
+		}
+	}
+
 	err, membersNode := this.parseStructBlock()
 	if err != nil {
 		return err, nil
 	}
 
-	structNode.left = membersNode
+	structNode.left = templateNode
+	structNode.right = membersNode
 
 	return nil, structNode
 }
@@ -1012,6 +1106,14 @@ func (this *Parser) parseFunctionDeclaration() (error, *Node) {
 
 	this.advance()
 
+	var templateNode *Node = nil
+	if this.currentToken.tokenType == TOKEN_LESS {
+		err, templateNode = this.parseTemplate()
+		if err != nil {
+			return err, nil
+		}
+	}
+
 	err, parametersNode := this.parseFunctionParameters()
 	if err != nil {
 		return err, nil
@@ -1026,7 +1128,11 @@ func (this *Parser) parseFunctionDeclaration() (error, *Node) {
 	}
 
 	functionDeclarationNode.left = functionTypeNode
-	functionDeclarationNode.right = parametersNode
+	functionDeclarationNode.right = &Node{
+		nodeType: NODE_FUNCTION_METADATA,
+		left: templateNode,
+		right: parametersNode,
+	}
 
 	return nil, functionDeclarationNode
 }
@@ -1121,12 +1227,21 @@ func (this *Parser) parseInterface() (error, *Node) {
 
 	this.advance()
 
+	var templateNode *Node = nil
+	if this.currentToken.tokenType == TOKEN_LESS {
+		err, templateNode = this.parseTemplate()
+		if err != nil {
+			return err, nil
+		}
+	}
+
 	err, functionDeclarationsNode := this.parseInterfaceBlock()
 	if err != nil {
 		return err, nil
 	}
 
-	interfaceNode.left = functionDeclarationsNode
+	interfaceNode.left = templateNode
+	interfaceNode.right = functionDeclarationsNode
 
 	return nil, interfaceNode
 }
@@ -1149,12 +1264,21 @@ func (this *Parser) parseImplement() (error, *Node) {
 
 	this.advance()
 
+	var templateNode *Node = nil
+	if this.currentToken.tokenType == TOKEN_LESS {
+		err, templateNode = this.parseTemplate()
+		if err != nil {
+			return err, nil
+		}
+	}
+
 	err, functionDefinitionsNode := this.parseImplementBlock()
 	if err != nil {
 		return err, nil
 	}
 
-	implementNode.left = functionDefinitionsNode
+	implementNode.left = templateNode
+	implementNode.right = functionDefinitionsNode
 
 	return nil, implementNode
 }
@@ -1258,17 +1382,22 @@ func (this *Parser) parsePath() (error, *Node) {
 
 	this.advance()
 
-	var nextPathNode *Node = nil
-	if this.currentToken.tokenType == TOKEN_DOT {
+	for this.currentToken.tokenType == TOKEN_DOT {
 		this.advance()
 
-		err, nextPathNode = this.parsePath()
+		err := this.expectToken(TOKEN_IDENTIFIER)
 		if err != nil {
 			return err, nil
 		}
-	}
 
-	pathNode.left = nextPathNode
+		pathNode = &Node {
+			nodeType: NODE_PATH,
+			token: this.currentToken,
+			left: pathNode,
+		}
+
+		this.advance()
+	}
 
 	return nil, pathNode
 }

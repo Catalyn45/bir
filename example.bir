@@ -2,17 +2,17 @@ module main
 
 import std
 
-interface Displayable {
+interface Displayable<Z> {
     function show()
 }
 
-struct Test {
-    a: int
+struct Test<T> {
+    a: T
     b: int
 }
 
-implement Test {
-    function init(a: int, b: int) {
+implement Test<T> {
+    function init(a: T, b: int) {
         this.a = a
         this.b = b
     }
@@ -30,10 +30,22 @@ function showMe(s: Displayable) {
     s.show()
 }
 
+function multiply<T>(a: T, b: T): T {
+    return a * b
+}
+
 function main() {
+	var d: dictionary<string, int> = dict<string, int>(10, 20)
+
+    var result = multiply(1.0, 2.0)
+
     var t = Test(10, 20)
 
     var sum: int = t.add()
+
+	l = list()
+	l[1] = 10
+	print(l["hello"])
 
     showMe(t)
 }
