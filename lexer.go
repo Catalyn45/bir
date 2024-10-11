@@ -5,69 +5,70 @@ import (
 	"unicode"
 )
 
-const(
-	TOKEN_TRUE = iota
-	TOKEN_FALSE = iota
+const (
+	TOKEN_TRUE           = iota
+	TOKEN_FALSE          = iota
 	TOKEN_STRING_LITERAL = iota
-	TOKEN_INT_LITERAL = iota
-	TOKEN_FLOAT_LITERAL = iota
+	TOKEN_INT_LITERAL    = iota
+	TOKEN_FLOAT_LITERAL  = iota
 
-	TOKEN_MODULE = iota
+	TOKEN_MODULE   = iota
 	TOKEN_FUNCTION = iota
-	TOKEN_RETURN = iota
-	TOKEN_IMPORT = iota
-	TOKEN_WITH = iota
-	TOKEN_CONST = iota
-	TOKEN_EXPORT = iota
-	TOKEN_PUBLIC = iota
-	TOKEN_PRIVATE = iota
+	TOKEN_RETURN   = iota
+	TOKEN_IMPORT   = iota
+	TOKEN_WITH     = iota
+	TOKEN_CONST    = iota
+	TOKEN_EXPORT   = iota
+	TOKEN_PUBLIC   = iota
+	TOKEN_PRIVATE  = iota
 
-	TOKEN_ASSIGN = iota
-	TOKEN_EQUAL = iota
-	TOKEN_LESS = iota
-	TOKEN_LESS_EQUAL = iota
-	TOKEN_GREATER = iota
+	TOKEN_ASSIGN        = iota
+	TOKEN_AS            = iota
+	TOKEN_EQUAL         = iota
+	TOKEN_LESS          = iota
+	TOKEN_LESS_EQUAL    = iota
+	TOKEN_GREATER       = iota
 	TOKEN_GREATER_EQUAL = iota
-	TOKEN_DIFFERENT = iota
-	TOKEN_AND = iota
-	TOKEN_OR = iota
-	TOKEN_NOT = iota
+	TOKEN_DIFFERENT     = iota
+	TOKEN_AND           = iota
+	TOKEN_OR            = iota
+	TOKEN_NOT           = iota
 
-	TOKEN_PLUS = iota
-	TOKEN_MINUS = iota
-	TOKEN_DIVIDE = iota
+	TOKEN_PLUS     = iota
+	TOKEN_MINUS    = iota
+	TOKEN_DIVIDE   = iota
 	TOKEN_MULTIPLY = iota
 
-	TOKEN_ADD_ASSIGN = iota
+	TOKEN_ADD_ASSIGN       = iota
 	TOKEN_SUBSTRACT_ASSIGN = iota
-	TOKEN_DIVIDE_ASSIGN = iota
-	TOKEN_MULTIPLY_ASSIGN = iota
+	TOKEN_DIVIDE_ASSIGN    = iota
+	TOKEN_MULTIPLY_ASSIGN  = iota
 
-	TOKEN_OPEN_PARANTHESIS = iota
+	TOKEN_OPEN_PARANTHESIS   = iota
 	TOKEN_CLOSED_PARANTHESIS = iota
-	TOKEN_OPEN_BRACKET = iota
-	TOKEN_CLOSED_BRACKET = iota
-	TOKEN_OPEN_SQUARE = iota
-	TOKEN_CLOSED_SQUARE = iota
+	TOKEN_OPEN_BRACKET       = iota
+	TOKEN_CLOSED_BRACKET     = iota
+	TOKEN_OPEN_SQUARE        = iota
+	TOKEN_CLOSED_SQUARE      = iota
 
-	TOKEN_INT = iota
-	TOKEN_FLOAT = iota
+	TOKEN_INT    = iota
+	TOKEN_FLOAT  = iota
 	TOKEN_STRING = iota
-	TOKEN_BOOL = iota
+	TOKEN_BOOL   = iota
 
-	TOKEN_VAR = iota
-	TOKEN_STRUCT = iota
+	TOKEN_VAR       = iota
+	TOKEN_STRUCT    = iota
 	TOKEN_INTERFACE = iota
 	TOKEN_IMPLEMENT = iota
 
-	TOKEN_IF = iota
-	TOKEN_ELSE = iota
+	TOKEN_IF    = iota
+	TOKEN_ELSE  = iota
 	TOKEN_WHILE = iota
-	TOKEN_FOR = iota
-	TOKEN_IN = iota
+	TOKEN_FOR   = iota
+	TOKEN_IN    = iota
 
-	TOKEN_COMMA = iota
-	TOKEN_DOT = iota
+	TOKEN_COMMA  = iota
+	TOKEN_DOT    = iota
 	TOKEN_COLONS = iota
 
 	TOKEN_IDENTIFIER = iota
@@ -93,6 +94,7 @@ var tokenTypesString = []string{
 	"TOKEN_PRIVATE",
 
 	"TOKEN_ASSIGN",
+	"TOKEN_AS",
 	"TOKEN_EQUAL",
 	"TOKEN_LESS",
 	"TOKEN_LESS_EQUAL",
@@ -146,20 +148,20 @@ var tokenTypesString = []string{
 }
 
 type Token struct {
-	tokenType int
+	tokenType  int
 	tokenValue string
-	position int
-	line int
-	column int
+	position   int
+	line       int
+	column     int
 }
 
 func (this *Lexer) newTokenWithValue(tokenType int, tokenValue string) *Token {
 	return &Token{
-		tokenType: tokenType,
+		tokenType:  tokenType,
 		tokenValue: tokenValue,
-		position: this.currentPosition,
-		line: this.currentLine,
-		column: this.currentColumn,
+		position:   this.currentPosition,
+		line:       this.currentLine,
+		column:     this.currentColumn,
 	}
 }
 
@@ -179,16 +181,16 @@ type Lexer struct {
 	text string
 
 	currentPosition int
-	currentLine int
-	currentColumn int
+	currentLine     int
+	currentColumn   int
 }
 
 func newLexer(text string) *Lexer {
 	return &Lexer{
-		text: text,
+		text:            text,
 		currentPosition: 0,
-		currentLine: 1,
-		currentColumn: 0,
+		currentLine:     1,
+		currentColumn:   0,
 	}
 }
 
@@ -290,18 +292,24 @@ func (this *Lexer) parseGreater() (error, *Token) {
 	return nil, this.newToken(TOKEN_GREATER)
 }
 
-func (this *Lexer) parseNot() (error, *Token) {
+func (this *Lexer) parseDifferent() (error, *Token) {
 	currentCharacter := this.text[this.currentPosition]
 	if currentCharacter != '!' {
 		return fmt.Errorf("invalid character"), nil
 	}
 
 	err := this.advance()
-	if err == nil && this.text[this.currentPosition] == '=' {
-		return this.SimpleToken(TOKEN_DIFFERENT)
+	if err != nil {
+		return err, nil
 	}
 
-	return nil, this.newToken(TOKEN_NOT)
+	if this.text[this.currentPosition] != '=' {
+		return fmt.Errorf("invalid character"), nil
+	}
+
+	this.advance()
+
+	return nil, this.newToken(TOKEN_DIFFERENT)
 }
 
 func (this *Lexer) getKeyword(text string) (error, *Token) {
@@ -352,6 +360,8 @@ func (this *Lexer) getKeyword(text string) (error, *Token) {
 		return nil, this.newToken(TOKEN_IMPORT)
 	case "with":
 		return nil, this.newToken(TOKEN_WITH)
+	case "as":
+		return nil, this.newToken(TOKEN_AS)
 	case "const":
 		return nil, this.newToken(TOKEN_CONST)
 	case "export":
@@ -381,10 +391,10 @@ func (this *Lexer) parseIdentifier() (error, *Token) {
 
 		currentCharacter = this.text[this.currentPosition]
 
-		if (!this.isIdentifierKeywordLetter(false, currentCharacter)) {
+		if !this.isIdentifierKeywordLetter(false, currentCharacter) {
 			break
 		}
-		
+
 		value = value + string(currentCharacter)
 	}
 
@@ -495,7 +505,7 @@ func (this *Lexer) isIdentifierKeywordLetter(firstCharacter bool, character byte
 	if character >= 'A' && character <= 'Z' {
 		return true
 	}
-	
+
 	if firstCharacter {
 		return false
 	}
@@ -540,7 +550,7 @@ func (this *Lexer) next() (error, *Token) {
 	case '>':
 		return this.parseGreater()
 	case '!':
-		return this.parseNot()
+		return this.parseDifferent()
 	case '(':
 		return this.SimpleToken(TOKEN_OPEN_PARANTHESIS)
 	case ')':

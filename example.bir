@@ -1,6 +1,7 @@
 module main
 
 import std
+import a.b as c
 
 interface Displayable<Z> {
     function show()
@@ -17,25 +18,32 @@ implement Test<T> {
         this.b = b
     }
 
-    function show() {
-        print(a + " " + b)
-    }
-
     function add(): int {
         return a + b
     }
 }
 
+implement Test<T> {
+    function show() {
+        print(a + " " + b)
+    }
+}
+
+implement int {
+    function toString() {
+        return "hello"
+    }
+}
+
+
 function showMe(s: Displayable) {
     s.show()
 }
 
-function multiply<T>(a: T, b: T): T {
-    return a * b
-}
+function main(): int {
+    10.toString()
 
-function main() {
-	var d: dictionary<string, int> = dict<string, int>(10, 20)
+	var d: dictionary<string, int> = dict(10, 20)
 
     var result = multiply(1.0, 2.0)
 
@@ -47,5 +55,28 @@ function main() {
 	l[1] = 10
 	print(l["hello"])
 
-    showMe(t)
+	if not start() {
+        showMe(t)
+	}
+
+    if a and b or c != d and e == f {
+        showMe(t)
+    }
+
+	with open() as f: file {
+        text = f.read()
+	}
+
+	with open(asd) as file
+
+    for line in file {
+        print(line)
+    }
+
+    var i = 0
+    while i < 10 {
+        i = i + 1
+    }
+
+    return 0
 }
