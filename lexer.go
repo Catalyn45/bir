@@ -19,8 +19,6 @@ const (
 	TOKEN_WITH     = iota
 	TOKEN_CONST    = iota
 	TOKEN_EXPORT   = iota
-	TOKEN_PUBLIC   = iota
-	TOKEN_PRIVATE  = iota
 
 	TOKEN_ASSIGN        = iota
 	TOKEN_AS            = iota
@@ -90,8 +88,6 @@ var tokenTypesString = []string{
 	"TOKEN_WITH",
 	"TOKEN_CONST",
 	"TOKEN_EXPORT",
-	"TOKEN_PUBLIC",
-	"TOKEN_PRIVATE",
 
 	"TOKEN_ASSIGN",
 	"TOKEN_AS",
@@ -366,10 +362,6 @@ func (this *Lexer) getKeyword(text string) (error, *Token) {
 		return nil, this.newToken(TOKEN_CONST)
 	case "export":
 		return nil, this.newToken(TOKEN_EXPORT)
-	case "public":
-		return nil, this.newToken(TOKEN_PUBLIC)
-	case "private":
-		return nil, this.newToken(TOKEN_PRIVATE)
 	}
 
 	return fmt.Errorf("Invalid keyword"), nil

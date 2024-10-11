@@ -694,25 +694,9 @@ func (this *Parser) parseConstant() (error, *Node) {
 		return err, nil
 	}
 
-	err = this.expectToken(TOKEN_IDENTIFIER)
+	err, constNode := this.parseIdentifier(false)
 	if err != nil {
 		return err, nil
-	}
-
-	constNode := &Node{
-		nodeType: NODE_CONST,
-		token:    this.currentToken,
-	}
-
-	this.advance()
-
-	var constTypeNode *Node = nil
-	if this.currentToken.tokenType == TOKEN_COLONS {
-		var err error
-		err, constTypeNode = this.parseTypeSpecification()
-		if err != nil {
-			return err, nil
-		}
 	}
 
 	err = this.eat(TOKEN_ASSIGN)
@@ -720,13 +704,12 @@ func (this *Parser) parseConstant() (error, *Node) {
 		return err, nil
 	}
 
-	err, expressionNode := this.parseExpression()
+	err, literalNode := this.parseLiteral()
 	if err != nil {
 		return err, nil
 	}
 
-	constNode.left = constTypeNode
-	constNode.right = expressionNode
+	constNode.right = literalNode
 
 	return nil, constNode
 }

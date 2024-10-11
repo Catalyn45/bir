@@ -23,26 +23,19 @@ implement Test<T> {
     }
 }
 
-implement Test<T> {
+implement Test {
     function show() {
         print(a + " " + b)
     }
 }
 
-implement int {
-    function toString() {
-        return "hello"
-    }
-}
-
-
 function showMe(s: Displayable) {
     s.show()
 }
 
-function main(): int {
-    10.toString()
+const PI = 3.14
 
+function main(): int {
 	var d: dictionary<string, int> = dict(10, 20)
 
     var result = multiply(1.0, 2.0)
