@@ -13,7 +13,7 @@ struct Test<T> {
 }
 
 implement Test<T> {
-    function init(a: T, b: int) {
+    init(a: T, b: int) {
         this.a = a
         this.b = b
     }

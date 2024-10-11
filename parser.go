@@ -26,6 +26,7 @@ const (
 	NODE_STRUCT               = iota
 	NODE_FUNCTION_DECLARATION = iota
 	NODE_FUNCTION             = iota
+	NODE_CONSTRUCTOR          = iota
 	NODE_IMPLEMENT            = iota
 	NODE_INTERFACE            = iota
 	NODE_IMPORT               = iota
@@ -67,6 +68,7 @@ var nodeStrings = []string{
 	"NODE_STRUCT",
 	"NODE_FUNCTION_DECLARATION",
 	"NODE_FUNCTION",
+	"NODE_CONSTRUCTOR",
 	"NODE_IMPLEMENT",
 	"NODE_INTERFACE",
 	"NODE_IMPORT",
@@ -1060,13 +1062,15 @@ func (this *Parser) parseFunctionParameters() (error, *Node) {
 	return nil, parametersNode
 }
 
-func (this *Parser) parseFunctionDeclaration() (error, *Node) {
-	err := this.eat(TOKEN_FUNCTION)
-	if err != nil {
-		return err, nil
+func (this *Parser) parseFunctionDeclaration(isConstructor bool) (error, *Node) {
+	if !isConstructor {
+		err := this.eat(TOKEN_FUNCTION)
+		if err != nil {
+			return err, nil
+		}
 	}
 
-	err = this.expectToken(TOKEN_IDENTIFIER)
+	err := this.expectToken(TOKEN_IDENTIFIER)
 	if err != nil {
 		return err, nil
 	}
@@ -1084,7 +1088,7 @@ func (this *Parser) parseFunctionDeclaration() (error, *Node) {
 	}
 
 	var functionTypeNode *Node = nil
-	if this.currentToken.tokenType == TOKEN_COLONS {
+	if !isConstructor && this.currentToken.tokenType == TOKEN_COLONS {
 		err, functionTypeNode = this.parseTypeSpecification()
 		if err != nil {
 			return err, nil
@@ -1105,7 +1109,7 @@ func (this *Parser) parseInterfaceBlock() (error, *Node) {
 
 	var functionDeclarationsNode *Node = nil
 	for currentNode := (*Node)(nil); this.currentToken.tokenType != TOKEN_CLOSED_BRACKET; {
-		err, node := this.parseFunctionDeclaration()
+		err, node := this.parseFunctionDeclaration(false)
 		if err != nil {
 			return err, nil
 		}
@@ -1123,8 +1127,8 @@ func (this *Parser) parseInterfaceBlock() (error, *Node) {
 	return nil, functionDeclarationsNode
 }
 
-func (this *Parser) parseFunction() (error, *Node) {
-	err, functionDeclarationNode := this.parseFunctionDeclaration()
+func (this *Parser) parseFunction(isConstructor bool) (error, *Node) {
+	err, functionDeclarationNode := this.parseFunctionDeclaration(isConstructor)
 	if err != nil {
 		return err, nil
 	}
@@ -1134,8 +1138,13 @@ func (this *Parser) parseFunction() (error, *Node) {
 		return err, nil
 	}
 
+	nodeType := NODE_FUNCTION
+	if isConstructor {
+		nodeType = NODE_CONSTRUCTOR
+	}
+
 	functionNode := &Node{
-		nodeType: NODE_FUNCTION,
+		nodeType: nodeType,
 		left:     functionDeclarationNode,
 		right:    statementsNode,
 	}
@@ -1150,8 +1159,14 @@ func (this *Parser) parseImplementBlock() (error, *Node) {
 	}
 
 	var functionsNode *Node = nil
+
 	for currentNode := (*Node)(nil); this.currentToken.tokenType != TOKEN_CLOSED_BRACKET; {
-		err, node := this.parseFunction()
+		var isConstructor = false
+		if this.currentToken.tokenType == TOKEN_IDENTIFIER && this.currentToken.tokenValue == "init" {
+			isConstructor = true
+		}
+
+		err, node := this.parseFunction(isConstructor)
 		if err != nil {
 			return err, nil
 		}
@@ -1257,7 +1272,7 @@ func (this *Parser) parseExportDeclaration() (error, *Node) {
 	}
 
 	if this.currentToken.tokenType == TOKEN_FUNCTION {
-		return this.parseFunction()
+		return this.parseFunction(false)
 	}
 
 	if this.currentToken.tokenType == TOKEN_CONST {
@@ -1315,7 +1330,7 @@ func (this *Parser) parseRootStatement() (error, *Node) {
 	}
 
 	if this.currentToken.tokenType == TOKEN_FUNCTION {
-		return this.parseFunction()
+		return this.parseFunction(false)
 	}
 
 	if this.currentToken.tokenType == TOKEN_CONST {
