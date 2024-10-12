@@ -308,6 +308,19 @@ func (this *Parser) parsePostfix() (error, *Node) {
 	}
 
 	for {
+		var templateNode *Node = nil
+		if this.currentToken.tokenType == TOKEN_DOUBLE_COLONS {
+			err, templateNode = this.parseTemplateSpecification()
+			if err != nil {
+				return err, nil
+			}
+
+			err = this.expectToken(TOKEN_OPEN_PARANTHESIS)
+			if err != nil {
+				return err, nil
+			}
+		}
+
 		if this.currentToken.tokenType == TOKEN_OPEN_PARANTHESIS {
 			err, arguments := this.parseArguments()
 			if err != nil {
@@ -317,7 +330,11 @@ func (this *Parser) parsePostfix() (error, *Node) {
 			return nil, &Node{
 				nodeType: NODE_CALL,
 				left:     left,
-				right:    arguments,
+				right:    &Node{
+					nodeType: NODE_LINK,
+					left: templateNode,
+					right: arguments,
+				},
 			}
 		} else if this.currentToken.tokenType == TOKEN_DOT {
 			this.advance()
@@ -592,6 +609,15 @@ func (this *Parser) parseTemplate() (error, *Node) {
 	this.advance()
 
 	return nil, templateNode
+}
+
+func (this *Parser) parseTemplateSpecification() (error, *Node) {
+	err := this.eat(TOKEN_DOUBLE_COLONS)
+	if err != nil {
+		return err, nil
+	}
+
+	return this.parseTemplate()
 }
 
 func (this *Parser) parseType() (error, *Node) {
@@ -1001,6 +1027,14 @@ func (this *Parser) parseStruct() (error, *Node) {
 		return err, nil
 	}
 
+	var templateNode *Node = nil
+	if this.currentToken.tokenType == TOKEN_DOUBLE_COLONS {
+		err, templateNode = this.parseTemplateSpecification()
+		if err != nil {
+			return err, nil
+		}
+	}
+
 	err = this.expectToken(TOKEN_IDENTIFIER)
 	if err != nil {
 		return err, nil
@@ -1012,14 +1046,6 @@ func (this *Parser) parseStruct() (error, *Node) {
 	}
 
 	this.advance()
-
-	var templateNode *Node = nil
-	if this.currentToken.tokenType == TOKEN_LESS {
-		err, templateNode = this.parseTemplate()
-		if err != nil {
-			return err, nil
-		}
-	}
 
 	err, membersNode := this.parseStructBlock()
 	if err != nil {
@@ -1070,6 +1096,15 @@ func (this *Parser) parseFunctionDeclaration(isConstructor bool) (error, *Node) 
 		}
 	}
 
+	var templateNode *Node = nil
+	if this.currentToken.tokenType == TOKEN_DOUBLE_COLONS {
+		var err error
+		err, templateNode = this.parseTemplateSpecification()
+		if err != nil {
+			return err, nil
+		}
+	}
+
 	err := this.expectToken(TOKEN_IDENTIFIER)
 	if err != nil {
 		return err, nil
@@ -1095,7 +1130,12 @@ func (this *Parser) parseFunctionDeclaration(isConstructor bool) (error, *Node) 
 		}
 	}
 
-	functionDeclarationNode.left = functionTypeNode
+	functionDeclarationNode.left = &Node {
+		nodeType: NODE_LINK,
+		left: functionTypeNode,
+		right: templateNode,
+	}
+
 	functionDeclarationNode.right = parametersNode
 
 	return nil, functionDeclarationNode
@@ -1190,6 +1230,14 @@ func (this *Parser) parseInterface() (error, *Node) {
 		return err, nil
 	}
 
+	var templateNode *Node = nil
+	if this.currentToken.tokenType == TOKEN_DOUBLE_COLONS {
+		err, templateNode = this.parseTemplateSpecification()
+		if err != nil {
+			return err, nil
+		}
+	}
+
 	err = this.expectToken(TOKEN_IDENTIFIER)
 	if err != nil {
 		return err, nil
@@ -1201,14 +1249,6 @@ func (this *Parser) parseInterface() (error, *Node) {
 	}
 
 	this.advance()
-
-	var templateNode *Node = nil
-	if this.currentToken.tokenType == TOKEN_LESS {
-		err, templateNode = this.parseTemplate()
-		if err != nil {
-			return err, nil
-		}
-	}
 
 	err, functionDeclarationsNode := this.parseInterfaceBlock()
 	if err != nil {
@@ -1227,6 +1267,14 @@ func (this *Parser) parseImplement() (error, *Node) {
 		return err, nil
 	}
 
+	var templateNode *Node = nil
+	if this.currentToken.tokenType == TOKEN_DOUBLE_COLONS {
+		err, templateNode = this.parseTemplateSpecification()
+		if err != nil {
+			return err, nil
+		}
+	}
+
 	err = this.expectToken(TOKEN_IDENTIFIER)
 	if err != nil {
 		return err, nil
@@ -1238,14 +1286,6 @@ func (this *Parser) parseImplement() (error, *Node) {
 	}
 
 	this.advance()
-
-	var templateNode *Node = nil
-	if this.currentToken.tokenType == TOKEN_LESS {
-		err, templateNode = this.parseTemplate()
-		if err != nil {
-			return err, nil
-		}
-	}
 
 	err, functionDefinitionsNode := this.parseImplementBlock()
 	if err != nil {

@@ -3,16 +3,16 @@ module main
 import std
 import a.b as c
 
-interface Displayable<Z> {
+interface::<Z> Displayable {
     function show()
 }
 
-struct Test<T> {
+struct::<T> Test {
     a: T
     b: int
 }
 
-implement Test<T> {
+implement::<T> Test {
     init(a: T, b: int) {
         this.a = a
         this.b = b
@@ -29,6 +29,10 @@ implement Test {
     }
 }
 
+function::<T> add(a: T, b: T): T {
+	return a + b
+}
+
 function showMe(s: Displayable) {
     s.show()
 }
@@ -36,7 +40,11 @@ function showMe(s: Displayable) {
 const PI = 3.14
 
 function main(): int {
-	var d: dictionary<string, int> = dict(10, 20)
+	l = list::<int>()
+
+    var result = add::<float>(1.0, 2.0)
+
+	var d: dictionary<string, list<int>> = dict::<string, list<int>>()
 
     var result = multiply(1.0, 2.0)
 
@@ -44,7 +52,6 @@ function main(): int {
 
     var sum: int = t.add()
 
-	l = list()
 	l[1] = 10
 	print(l["hello"])
 

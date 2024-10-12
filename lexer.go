@@ -68,6 +68,7 @@ const (
 	TOKEN_COMMA  = iota
 	TOKEN_DOT    = iota
 	TOKEN_COLONS = iota
+	TOKEN_DOUBLE_COLONS = iota
 
 	TOKEN_IDENTIFIER = iota
 
@@ -137,6 +138,7 @@ var tokenTypesString = []string{
 	"TOKEN_COMMA",
 	"TOKEN_DOT",
 	"TOKEN_COLONS",
+	"TOKEN_DOUBLE_COLONS",
 
 	"TOKEN_IDENTIFIER",
 
@@ -306,6 +308,20 @@ func (this *Lexer) parseDifferent() (error, *Token) {
 	this.advance()
 
 	return nil, this.newToken(TOKEN_DIFFERENT)
+}
+
+func (this *Lexer) parseColons() (error, *Token) {
+	currentCharacter := this.text[this.currentPosition]
+	if currentCharacter != ':' {
+		return fmt.Errorf("invalid character"), nil
+	}
+
+	err := this.advance()
+	if err == nil && this.text[this.currentPosition] == ':' {
+		return this.SimpleToken(TOKEN_DOUBLE_COLONS)
+	}
+
+	return nil, this.newToken(TOKEN_COLONS)
 }
 
 func (this *Lexer) getKeyword(text string) (error, *Token) {
@@ -543,6 +559,8 @@ func (this *Lexer) next() (error, *Token) {
 		return this.parseGreater()
 	case '!':
 		return this.parseDifferent()
+	case ':':
+		return this.parseColons()
 	case '(':
 		return this.SimpleToken(TOKEN_OPEN_PARANTHESIS)
 	case ')':
@@ -559,8 +577,6 @@ func (this *Lexer) next() (error, *Token) {
 		return this.SimpleToken(TOKEN_COMMA)
 	case '.':
 		return this.SimpleToken(TOKEN_DOT)
-	case ':':
-		return this.SimpleToken(TOKEN_COLONS)
 	case '"':
 		return this.parseString()
 	}
