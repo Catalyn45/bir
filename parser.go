@@ -12,7 +12,6 @@ const (
 	NODE_STATEMENT            = iota
 	NODE_RETURN               = iota
 	NODE_IF                   = iota
-	NODE_BRANCH               = iota
 	NODE_VARIABLE             = iota
 	NODE_INT                  = iota
 	NODE_FLOAT                = iota
@@ -24,7 +23,6 @@ const (
 	NODE_CONST                = iota
 	NODE_ITERATION            = iota
 	NODE_STRUCT               = iota
-	NODE_FUNCTION_DECLARATION = iota
 	NODE_FUNCTION             = iota
 	NODE_CONSTRUCTOR          = iota
 	NODE_IMPLEMENT            = iota
@@ -54,7 +52,6 @@ var nodeStrings = []string{
 	"NODE_STATEMENT",
 	"NODE_RETURN",
 	"NODE_IF",
-	"NODE_BRANCH",
 	"NODE_VARIABLE",
 	"NODE_INT",
 	"NODE_FLOAT",
@@ -66,7 +63,6 @@ var nodeStrings = []string{
 	"NODE_CONST",
 	"NODE_ITERATION",
 	"NODE_STRUCT",
-	"NODE_FUNCTION_DECLARATION",
 	"NODE_FUNCTION",
 	"NODE_CONSTRUCTOR",
 	"NODE_IMPLEMENT",
@@ -774,7 +770,7 @@ func (this *Parser) parseIf() (error, *Node) {
 	}
 
 	branchNode := Node{
-		nodeType: NODE_BRANCH,
+		nodeType: NODE_LINK,
 		left:     statementsNode,
 	}
 
@@ -825,7 +821,7 @@ func (this *Parser) parseWhile() (error, *Node) {
 	}
 
 	branchNode := Node{
-		nodeType: NODE_BRANCH,
+		nodeType: NODE_LINK,
 		left:     statementsNode,
 	}
 
@@ -1119,7 +1115,7 @@ func (this *Parser) parseFunctionDeclaration(isConstructor bool) (error, *Node) 
 	}
 
 	functionDeclarationNode := &Node{
-		nodeType: NODE_FUNCTION_DECLARATION,
+		nodeType: NODE_LINK,
 		token:    this.currentToken,
 	}
 
