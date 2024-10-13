@@ -3,16 +3,16 @@ module main
 import std
 import a.b as c
 
-interface::<Z> Displayable {
+interface Displayable::<Z> {
     function show()
 }
 
-struct::<T> Test {
+struct Test::<T> {
     a: T
     b: int
 }
 
-implement::<T> Test {
+implement Test::<T> {
     init(a: T, b: int) {
         this.a = a
         this.b = b
@@ -29,7 +29,7 @@ implement Test {
     }
 }
 
-function::<T> add(a: T, b: T): T {
+function add::<T>(a: T, b: T): T {
 	return a + b
 }
 
