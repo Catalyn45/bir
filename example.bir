@@ -3,8 +3,23 @@ module main
 import std
 import a.b as c
 
-interface Displayable::<Z> {
+interface Displayable {
     function show()
+}
+
+struct Node {
+    left: Node
+    right: Node
+}
+
+implement Node {
+    function show() {
+        print(this.left + " " + this.right)
+    }
+}
+
+interface addable::<T> {
+    function add(): T
 }
 
 struct Test::<T> {
@@ -20,12 +35,6 @@ implement Test::<T> {
 
     function add(): int {
         return a + b
-    }
-}
-
-implement Test {
-    function show() {
-        print(a + " " + b)
     }
 }
 
