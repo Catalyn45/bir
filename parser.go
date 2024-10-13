@@ -327,7 +327,7 @@ func (this *Parser) parsePostfix() (error, *Node) {
 				return err, nil
 			}
 
-			return nil, &Node{
+			left = &Node{
 				nodeType: NODE_CALL,
 				left:     left,
 				right:    &Node{
@@ -336,6 +336,16 @@ func (this *Parser) parsePostfix() (error, *Node) {
 					right: arguments,
 				},
 			}
+		} else if this.currentToken.tokenType == TOKEN_AS {
+			this.advance()
+
+			err, identifier := this.parseIdentifier(false)
+			if err != nil {
+				return err, nil
+			}
+
+			identifier.right = left
+			left = identifier
 		} else if this.currentToken.tokenType == TOKEN_DOT {
 			this.advance()
 
@@ -908,16 +918,6 @@ func (this *Parser) parseWith() (error, *Node) {
 		return err, nil
 	}
 
-	err = this.eat(TOKEN_AS)
-	if err != nil {
-		return err, nil
-	}
-
-	err, typed := this.parseIdentifier(false)
-	if err != nil {
-		return err, nil
-	}
-
 	var statementsNode *Node = nil
 	if this.currentToken.tokenType == TOKEN_OPEN_BRACKET {
 		err, statementsNode = this.parseStatementsBlock()
@@ -930,7 +930,6 @@ func (this *Parser) parseWith() (error, *Node) {
 		nodeType: NODE_WITH,
 		left: &Node{
 			nodeType: NODE_LINK,
-			left:     typed,
 			right:    expression,
 		},
 		right: statementsNode,

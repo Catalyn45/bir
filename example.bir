@@ -60,8 +60,17 @@ function main(): int {
 	}
 
     if a and b or c != d and e == f {
-        showMe(t)
+        showMe(t)()
     }
+
+    var iter = iterator()
+	while iter.next() as item {
+		print(item)
+	}
+
+	if add(1, 2) as result > 10 {
+		print(result)
+	}
 
 	with open() as f: file {
         text = f.read()
