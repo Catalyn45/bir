@@ -167,12 +167,15 @@ func (this *Node) Dump(indent int, bars *[]int, nodeSymbol string) {
 type Parser struct {
 	lexer        *Lexer
 	currentToken *Token
+
+	asAllowed bool
 }
 
 func newParser(lexer *Lexer) *Parser {
 	return &Parser{
 		lexer:        lexer,
 		currentToken: nil,
+		asAllowed: false,
 	}
 }
 
@@ -336,7 +339,7 @@ func (this *Parser) parsePostfix() (error, *Node) {
 					right: arguments,
 				},
 			}
-		} else if this.currentToken.tokenType == TOKEN_AS {
+		} else if this.asAllowed && this.currentToken.tokenType == TOKEN_AS {
 			this.advance()
 
 			err, identifier := this.parseIdentifier(false)
@@ -758,10 +761,12 @@ func (this *Parser) parseIf() (error, *Node) {
 		return err, nil
 	}
 
+	this.asAllowed = true
 	err, expressionNode := this.parseExpression()
 	if err != nil {
 		return err, nil
 	}
+	this.asAllowed = false
 
 	err, statementsNode := this.parseStatementsBlock()
 	if err != nil {
@@ -807,10 +812,12 @@ func (this *Parser) parseWhile() (error, *Node) {
 		return err, nil
 	}
 
+	this.asAllowed = true
 	err, expressionNode := this.parseExpression()
 	if err != nil {
 		return err, nil
 	}
+	this.asAllowed = false
 
 	err, statementsNode := this.parseStatementsBlock()
 	if err != nil {
@@ -913,10 +920,12 @@ func (this *Parser) parseWith() (error, *Node) {
 		return err, nil
 	}
 
+	this.asAllowed = true
 	err, expression := this.parseExpression()
 	if err != nil {
 		return err, nil
 	}
+	this.asAllowed = false
 
 	var statementsNode *Node = nil
 	if this.currentToken.tokenType == TOKEN_OPEN_BRACKET {
