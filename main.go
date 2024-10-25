@@ -3,7 +3,7 @@ package main
 import "os"
 
 func main() {
-	data, err := os.ReadFile("example.bir")
+	data, err := os.ReadFile("test.bir")
 	if err != nil {
 		panic(err)
 	}
@@ -19,4 +19,11 @@ func main() {
 	}
 
 	root.Dump(0, &[]int{}, "")
+
+	checker := newChecker([]*Node {root})
+
+	err = checker.Check()
+	if err != nil {
+		panic(err)
+	}
 }

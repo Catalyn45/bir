@@ -4,15 +4,13 @@ import "fmt"
 
 const (
 	NODE_PROGRAM              = iota
-	NODE_EXPRESSION           = iota
 	NODE_ASSIGNMENT           = iota
 	NODE_PATH                 = iota
-	NODE_DECLARATION          = iota
 	NODE_PARAMETER            = iota
-	NODE_STATEMENT            = iota
 	NODE_RETURN               = iota
 	NODE_IF                   = iota
 	NODE_VARIABLE             = iota
+	NODE_VARIABLE_DECLARATION = iota
 	NODE_INT                  = iota
 	NODE_FLOAT                = iota
 	NODE_STRING               = iota
@@ -44,15 +42,13 @@ const (
 
 var nodeStrings = []string{
 	"NODE_PROGRAM",
-	"NODE_EXPRESSION",
 	"NODE_ASSIGNMENT",
 	"NODE_PATH",
-	"NODE_DECLARATION",
 	"NODE_PARAMETER",
-	"NODE_STATEMENT",
 	"NODE_RETURN",
 	"NODE_IF",
 	"NODE_VARIABLE",
+	"NODE_VARIABLE_DECLARATION",
 	"NODE_INT",
 	"NODE_FLOAT",
 	"NODE_STRING",
@@ -675,7 +671,7 @@ func (this *Parser) parseIdentifier(typeRequired bool) (error, *Node) {
 	}
 
 	variableNode := &Node{
-		nodeType: NODE_VARIABLE,
+		nodeType: NODE_VARIABLE_DECLARATION,
 		token:    this.currentToken,
 	}
 
