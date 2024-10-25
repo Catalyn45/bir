@@ -2,5 +2,5 @@ module main
 
 function main(): bla {
 	var a = 10
-	var b: int = a
+	var b: string = a
 }

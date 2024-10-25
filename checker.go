@@ -173,7 +173,7 @@ func (this *Checker) walk(node *Node) error {
 		}
 	} else if node.nodeType == NODE_FUNCTION {
 		symbolName := node.left.token.tokenValue
-		err, symbolType := this.getTypeFromNode(node.left.left)
+		err, symbolType := this.getTypeFromNode(node.left.left.left)
 		if err != nil {
 			return err
 		}
