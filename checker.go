@@ -5,6 +5,7 @@ import "fmt"
 type Symbol struct {
 	name       string
 	simbolType string
+	node 	   *Node
 }
 
 type Checker struct {
@@ -31,7 +32,7 @@ func newChecker(asts []*Node) *Checker {
 	}
 }
 
-func (this *Checker) addSymbol(symbolName string, symbolType string) error {
+func (this *Checker) addSymbol(symbolName string, symbolType string, node *Node) error {
 	for _, symbol := range this.symbolTable[this.currentScope] {
 		if symbol.name == symbolName {
 			return fmt.Errorf("Symbol already declared in current scope")
@@ -41,23 +42,33 @@ func (this *Checker) addSymbol(symbolName string, symbolType string) error {
 	this.symbolTable[this.currentScope] = append(this.symbolTable[this.currentScope], Symbol {
 		name: symbolName,
 		simbolType: symbolType,
+		node: node,
 	})
 
 	return nil
 }
 
 func (this *Checker) searchSymbolType(symbolName string) (error, string) {
+	err, symbol := this.searchSymbol(symbolName)
+	if err != nil {
+		return err, ""
+	}
+
+	return nil, symbol.simbolType
+}
+
+func (this *Checker) searchSymbol(symbolName string) (error, *Symbol) {
 	for i := this.currentScope; i >= 0; i-- {
-		symbols := this.symbolTable[this.currentScope]
+		symbols := this.symbolTable[i]
 
 		for _, symbol := range symbols {
 			if symbol.name == symbolName {
-				return nil, symbol.simbolType
+				return nil, &symbol
 			}
 		}
 	}
 
-	return fmt.Errorf("Symbol not declarated"), ""
+	return fmt.Errorf("Symbol not declarated"), nil
 }
 
 func (this *Checker) getTypeFromNode(node *Node) (error, string) {
@@ -71,6 +82,10 @@ func (this *Checker) getTypeFromNode(node *Node) (error, string) {
 
 	if node.nodeType == NODE_STRING_TYPE {
 		return nil, "string"
+	}
+
+	if node.nodeType == NODE_BOOL_TYPE {
+		return nil, "bool"
 	}
 
 	if node.nodeType == NODE_CUSTOM_TYPE {
@@ -89,9 +104,9 @@ func (this *Checker) determineType(node *Node) (error, string) {
 		return nil, "float"
 	}
 
-	// if node.nodeType == NODE_BOOL {
-	//		return nil, "bool"
-	// }
+	if node.nodeType == NODE_BOOL {
+		return nil, "bool"
+	}
 
 	if node.nodeType == NODE_STRING {
 		return nil, "string"
@@ -133,71 +148,166 @@ func (this *Checker) determineType(node *Node) (error, string) {
 		if typeLeft != typeRight {
 			return fmt.Errorf("invalid operation between different types: %s and %s", typeLeft, typeRight), ""
 		}
+
+		return nil, typeLeft
+	}
+
+	if node.nodeType == NODE_CALL {
+		err, functionSymbol := this.searchSymbol(node.left.token.tokenValue)
+		if err != nil {
+			return err, ""
+		}
+
+		functionNode := functionSymbol.node
+
+		var parameterTypes []string
+		for parameter := functionNode.left.right; parameter != nil; parameter = parameter.next {
+			err, parameterType := this.getTypeFromNode(parameter.left)
+			if err != nil {
+				return err, ""
+			}
+
+			parameterTypes = append(parameterTypes, parameterType)
+		}
+
+		var argumentTypes []string
+		for argument := node.right.right; argument != nil; argument = argument.next {
+			err, argumentType := this.determineType(argument)
+			if err != nil {
+				return err, ""
+			}
+
+			argumentTypes = append(argumentTypes, argumentType)
+		}
+
+		if len(parameterTypes) != len(argumentTypes) {
+			return fmt.Errorf("Not the same number of arguments"), ""
+		}
+
+		for i := 0; i < len(parameterTypes); i++ {
+			if parameterTypes[i] != argumentTypes[i] {
+				return fmt.Errorf("Invalid argument type for parameter"), ""
+			}
+		}
+
+		return nil, functionSymbol.simbolType
+	}
+
+	if node.nodeType == NODE_RETURN {
+		return this.determineType(node.left)
 	}
 
 	return fmt.Errorf("Can't check type"), ""
 }
 
+func (this *Checker) enterScope() {
+	this.currentScope ++
+}
+
+func (this *Checker) leaveScope() {
+	delete(this.symbolTable, this.currentScope)
+
+	this.currentScope --
+}
+
 func (this *Checker) walk(node *Node) error {
-	if node.nodeType == NODE_VARIABLE_DECLARATION {
-		var initializationSymbolType string
-		if node.right != nil {
-			var err error
-			err, initializationSymbolType = this.determineType(node.right)
+	this.enterScope()
+	defer this.leaveScope()
+
+	for node != nil {
+		if node.nodeType == NODE_VARIABLE_DECLARATION {
+			var initializationSymbolType string
+			if node.right != nil {
+				var err error
+				err, initializationSymbolType = this.determineType(node.right)
+				if err != nil {
+					return err
+				}
+			}
+
+			var variableSymbolType string
+			if node.left != nil {
+				err, symbolType := this.getTypeFromNode(node.left)
+				if err != nil {
+					return err
+				}
+
+				variableSymbolType = symbolType
+			}
+
+			if variableSymbolType == "" {
+				variableSymbolType = initializationSymbolType
+			}
+
+			if variableSymbolType != initializationSymbolType {
+				return fmt.Errorf("can't initialize with different types")
+			}
+
+			err := this.addSymbol(node.token.tokenValue, variableSymbolType, node)
 			if err != nil {
 				return err
 			}
-		}
-
-		var variableSymbolType string
-		if node.left != nil {
-			err, symbolType := this.getTypeFromNode(node.left)
+		} else if node.nodeType == NODE_FUNCTION {
+			symbolName := node.left.token.tokenValue
+			err, symbolType := this.getTypeFromNode(node.left.left.left)
 			if err != nil {
 				return err
 			}
 
-			variableSymbolType = symbolType
+			err = this.addSymbol(symbolName, symbolType, node)
+			if err != nil {
+				return err
+			}
+			
+			err = this.walk(node.right)
+			if err != nil {
+				return err
+			}
+		} else if node.nodeType == NODE_IF {
+			err, symbolType := this.determineType(node.left)
+			if err != nil {
+				return err
+			}
+
+			if symbolType != "bool" {
+				return fmt.Errorf("Can't have non-bool in if")
+			}
+
+			branchNode := node.right
+
+			err = this.walk(branchNode.left)
+			if err != nil {
+				return err
+			}
+
+			err = this.walk(branchNode.right)
+			if err != nil {
+				return err
+			}
+		} else if node.nodeType == NODE_ASSIGNMENT {
+			err, leftSymbolType := this.determineType(node.left)
+			if err != nil {
+				return err
+			}
+
+			err, rightSymbolType := this.determineType(node.right)
+			if err != nil {
+				return err
+			}
+
+			if leftSymbolType != rightSymbolType {
+				return fmt.Errorf("Can't assign different types")
+			}
+		} else if node.nodeType == NODE_RETURN {
+			err, _ := this.determineType(node)
+			if err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("Invalid node")
 		}
 
-		if variableSymbolType == "" {
-			variableSymbolType = initializationSymbolType
-		}
-
-		if variableSymbolType != initializationSymbolType {
-			return fmt.Errorf("can't assign different types")
-		}
-
-		err := this.addSymbol(node.token.tokenValue, variableSymbolType)
-		if err != nil {
-			return err
-		}
-	} else if node.nodeType == NODE_FUNCTION {
-		symbolName := node.left.token.tokenValue
-		err, symbolType := this.getTypeFromNode(node.left.left.left)
-		if err != nil {
-			return err
-		}
-
-		err = this.addSymbol(symbolName, symbolType)
-		if err != nil {
-			return err
-		}
-		
-		this.currentScope++
-
-		err = this.walk(node.right)
-		if err != nil {
-			return err
-		}
-	} else {
-		return fmt.Errorf("Invalid node")
-	}
-
-	if node.next != nil {
-		err := this.walk(node.next)
-		if err != nil {
-			return err
-		}
+		node = node.next
 	}
 
 	return nil

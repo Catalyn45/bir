@@ -14,6 +14,7 @@ const (
 	NODE_INT                  = iota
 	NODE_FLOAT                = iota
 	NODE_STRING               = iota
+	NODE_BOOL                 = iota
 	NODE_WHILE                = iota
 	NODE_FOR                  = iota
 	NODE_MEMBER               = iota
@@ -52,6 +53,7 @@ var nodeStrings = []string{
 	"NODE_INT",
 	"NODE_FLOAT",
 	"NODE_STRING",
+	"NODE_BOOL",
 	"NODE_WHILE",
 	"NODE_FOR",
 	"NODE_MEMBER",
@@ -226,6 +228,12 @@ func (this *Parser) parseLiteral() (error, *Node) {
 	} else if this.currentToken.tokenType == TOKEN_STRING_LITERAL {
 		literalNode = &Node{
 			nodeType: NODE_STRING,
+			token:    this.currentToken,
+		}
+
+	} else if this.currentToken.tokenType == TOKEN_TRUE || this.currentToken.tokenType == TOKEN_FALSE {
+		literalNode = &Node{
+			nodeType: NODE_BOOL,
 			token:    this.currentToken,
 		}
 	} else {

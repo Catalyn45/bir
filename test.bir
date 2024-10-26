@@ -1,6 +1,13 @@
 module main
 
-function main(): bla {
-	var a = 10
-	var b: string = a
+function test(a: int): int {
+	return 10
+}
+
+function main(): int {
+	if true {
+		var a = 10
+	}
+
+	a = 20
 }
