@@ -1,13 +1,25 @@
 module main
 
+struct B {
+    z: string
+}
+
+struct A {
+	a: int
+	b: string
+    x: B
+}
+
 function test(a: int): int {
-	return 10
+	return a
 }
 
 function main(): int {
-	if true {
-		var a = 10
-	}
+	var b = "b"
+	var a = 30 == 20 and 10 == 40
+	var c = test(10)
 
-	a = 20
+	var z = A()
+
+	return 10
 }
