@@ -23,6 +23,7 @@ const (
 	NODE_ITERATION            = iota
 	NODE_STRUCT               = iota
 	NODE_FUNCTION             = iota
+	NODE_FUNCTION_DECLARATION = iota
 	NODE_CONSTRUCTOR          = iota
 	NODE_IMPLEMENT            = iota
 	NODE_INTERFACE            = iota
@@ -62,6 +63,7 @@ var nodeStrings = []string{
 	"NODE_ITERATION",
 	"NODE_STRUCT",
 	"NODE_FUNCTION",
+	"NODE_FUNCTION_DECLARATION",
 	"NODE_CONSTRUCTOR",
 	"NODE_IMPLEMENT",
 	"NODE_INTERFACE",
@@ -86,6 +88,8 @@ type Node struct {
 	left     *Node
 	right    *Node
 	next     *Node
+	symbolTable *SymbolTable
+	symbol *Symbol
 }
 
 func (this *Node) ToString() string {
@@ -1110,7 +1114,7 @@ func (this *Parser) parseFunctionDeclaration(isConstructor bool) (error, *Node) 
 	}
 
 	functionDeclarationNode := &Node{
-		nodeType: NODE_LINK,
+		nodeType: NODE_FUNCTION_DECLARATION,
 		token:    this.currentToken,
 	}
 

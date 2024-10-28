@@ -10,16 +10,54 @@ struct A {
     x: B
 }
 
-function test(a: int): int {
-	return a
+implement A {
+	function doSomething(): int {
+		return 10
+	}
+
+	function show(a: int): string {
+		return ""
+	}
+
+	function draw(b: string): int {
+		return 0
+	}
+}
+
+interface showable {
+	function show(a: int): string
+	function draw(b: string): int
+}
+
+function testParameters(s: string): string {
+	return s
+}
+
+function test(s: showable): int {
+	var miau = s.show(10)
+
+	return 10
+}
+
+function testEmpty(a: int) {
+	var b = 20
 }
 
 function main(): int {
+	if 1 + 1 as result > 0 and 2 + 2 as result2 > 1 {
+		var ggg = result
+		var ahah = result2
+	} else {
+		var zzz = result
+	}
+
 	var b = "b"
 	var a = 30 == 20 and 10 == 40
-	var c = test(10)
 
 	var z = A()
+	z.x.z = "yellow"
+
+	test(z)
 
 	return 10
 }

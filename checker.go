@@ -3,6 +3,7 @@ package main
 import "fmt"
 
 const (
+	TYPE_CONST    = iota
 	TYPE_LITERAL  = iota
 	TYPE_VARIABLE = iota
 	TYPE_FUNCTION = iota
@@ -10,23 +11,28 @@ const (
 	TYPE_INTERFACE = iota
 )
 
+type Signature struct {
+	parameterTypes[] string
+	returnType string
+}
+
 type SymbolType struct {
 	kind int
 	name string
-	signature []string
+	signature *Signature
 }
 
 type Symbol struct {
 	name       string
 	simbolType SymbolType
 	node 	   *Node
-	children   []Symbol
 }
 
+type SymbolTable map[string]*Symbol
+
 type Checker struct {
-	symbolTable  map[int][]Symbol
-	currentScope int
 	modules map[string][]*Node
+	symbolTables  *Stack[*SymbolTable]
 	functionStack *Stack[*Symbol]
 }
 
@@ -43,71 +49,103 @@ func newChecker(asts []*Node) *Checker {
 
 	return &Checker {
 		modules:      modules,
-		currentScope: 0,
-		symbolTable:  make(map[int][]Symbol),
+		symbolTables:  &Stack[*SymbolTable]{},
 		functionStack: &Stack[*Symbol]{},
 	}
 }
 
 func (this *Checker) symbolAlreadyExists(symbolName string) bool {
-	for _, symbol := range this.symbolTable[this.currentScope] {
-		if symbol.name == symbolName {
-			return true
-		}
-	}
+	lastScope := *this.symbolTables.peek()
+	
+	_, ok := lastScope[symbolName]
 
-	return false
+	return ok
 }
 
 func (this *Checker) addVariableSymbol(varName string, varType string, node *Node) error {
 	if this.symbolAlreadyExists(varName) {
-		return fmt.Errorf("Symbol already declared in current scope")
+		return fmt.Errorf("variable already declared in current scope")
 	}
 
-	this.symbolTable[this.currentScope] = append(this.symbolTable[this.currentScope], Symbol {
+	lastScope := *this.symbolTables.peek()
+
+	lastScope[varName] = &Symbol {
 		name: varName,
 		simbolType: SymbolType {
 			kind: TYPE_VARIABLE,
 			name: varType,
 		},
 		node: node,
-	})
+	}
+
+	node.symbol = lastScope[varName]
 
 	return nil
 }
 
-func (this *Checker) addFunctionSymbol(functionName string, returnType string, signature []string, node *Node) (error, *Symbol) {
+func (this *Checker) addFunctionSymbol(functionName string, returnType string, parametersTypes []string, node *Node) (error, *Symbol) {
 	if this.symbolAlreadyExists(functionName) {
-		return fmt.Errorf("Symbol already declared in current scope"), nil
+		return fmt.Errorf("function already declared in current scope"), nil
 	}
 
-	this.symbolTable[this.currentScope] = append(this.symbolTable[this.currentScope], Symbol {
+	lastScope := *this.symbolTables.peek()
+
+	lastScope[functionName] = &Symbol {
 		name: functionName,
 		simbolType: SymbolType {
 			kind: TYPE_FUNCTION,
-			name: returnType,
-			signature: signature,
+			name: functionName,
+			signature: &Signature {
+				parameterTypes: parametersTypes,
+				returnType: returnType,
+			},
 		},
 		node: node,
-	})
-
-	return nil, &this.symbolTable[this.currentScope][len(this.symbolTable[this.currentScope]) - 1]
-}
-
-func (this *Checker) addStructSymbol(structName string, node *Node, children []Symbol) error {
-	if this.symbolAlreadyExists(structName) {
-		return fmt.Errorf("Symbol already declared in current scope")
 	}
 
-	this.symbolTable[this.currentScope] = append(this.symbolTable[this.currentScope], Symbol {
+	node.symbol = lastScope[functionName]
+
+	return nil, lastScope[functionName]
+}
+
+func (this *Checker) addStructSymbol(structName string, node *Node) error {
+	if this.symbolAlreadyExists(structName) {
+		return fmt.Errorf("struct already declared in current scope")
+	}
+
+	lastScope := *this.symbolTables.peek()
+
+	lastScope[structName] = &Symbol {
 		name: structName,
 		simbolType: SymbolType {
 			kind: TYPE_STRUCT,
 			name: structName,
 		},
 		node: node,
-		children: children,
-	})
+	}
+
+	node.symbol = lastScope[structName]
+
+	return nil
+}
+
+func (this *Checker) addInterfaceSymbol(interfaceName string, node *Node) error {
+	if this.symbolAlreadyExists(interfaceName) {
+		return fmt.Errorf("interface already declared in current scope")
+	}
+
+	lastScope := *this.symbolTables.peek()
+
+	lastScope[interfaceName] = &Symbol {
+		name: interfaceName,
+		simbolType: SymbolType {
+			kind: TYPE_INTERFACE,
+			name: interfaceName,
+		},
+		node: node,
+	}
+
+	node.symbol = lastScope[interfaceName]
 
 	return nil
 }
@@ -122,17 +160,24 @@ func (this *Checker) searchSymbolType(symbolName string) (error, *SymbolType) {
 }
 
 func (this *Checker) searchSymbol(symbolName string) (error, *Symbol) {
-	for i := this.currentScope; i >= 0; i-- {
-		symbols := this.symbolTable[i]
+	var foundSymbol *Symbol = nil
 
-		for _, symbol := range symbols {
-			if symbol.name == symbolName {
-				return nil, &symbol
-			}
+	this.symbolTables.foreach(func (item *SymbolTable) (stop bool) {
+		val, ok := (*item)[symbolName]
+		if !ok {
+			return false
 		}
+
+		foundSymbol = val
+
+		return true
+	})
+
+	if foundSymbol == nil {
+		return fmt.Errorf("Symbol not declarated"), nil
 	}
 
-	return fmt.Errorf("Symbol not declarated"), nil
+	return nil, foundSymbol
 }
 
 func (this *Checker) getTypeFromNode(node *Node) (error, string) {
@@ -326,12 +371,12 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 			argumentTypes = append(argumentTypes, argumentType.name)
 		}
 
-		if len(parameterTypes) != len(argumentTypes) {
+		if len(parameterTypes.parameterTypes) != len(argumentTypes) {
 			return fmt.Errorf("Not the same number of arguments"), nil
 		}
 
-		for i := 0; i < len(parameterTypes); i++ {
-			if parameterTypes[i] != argumentTypes[i] {
+		for i := 0; i < len(parameterTypes.parameterTypes); i++ {
+			if !this.isAssignable(parameterTypes.parameterTypes[i], argumentTypes[i]) {
 				return fmt.Errorf("Invalid argument type for parameter"), nil
 			}
 		}
@@ -350,191 +395,336 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 			return err, nil
 		}
 
-		if symbol.simbolType.kind != TYPE_STRUCT {
-			return fmt.Errorf("Can only access field of struct"), nil
+		if symbol.simbolType.kind != TYPE_STRUCT && symbol.simbolType.kind != TYPE_INTERFACE {
+			return fmt.Errorf("Can only access field of struct or interface"), nil
 		}
 
-		for _, child := range symbol.children {
-			if child.name == node.token.tokenValue {
-				return nil, &child.simbolType
+		symbol, ok := (*symbol.node.symbolTable)[node.token.tokenValue]
+		if !ok {
+			return fmt.Errorf("member does not exist in struct or interface"), nil
+		}
+
+		return nil, &symbol.simbolType
+	}
+
+	if node.nodeType == NODE_VARIABLE_DECLARATION {
+		var initializationSymbolType string
+		if node.right != nil {
+			err, initializationSymbol := this.determineType(node.right)
+			if err != nil {
+				return err, nil
 			}
+
+			initializationSymbolType = initializationSymbol.name
 		}
 
-		return fmt.Errorf("member does not exist in struct"), nil
+		var variableSymbolType string
+		if node.left != nil {
+			err, symbolType := this.getTypeFromNode(node.left)
+			if err != nil {
+				return err, nil
+			}
+
+			variableSymbolType = symbolType
+		}
+
+		if variableSymbolType == "" {
+			variableSymbolType = initializationSymbolType
+		}
+
+		if initializationSymbolType != "" && !this.isAssignable(variableSymbolType, initializationSymbolType) {
+			return fmt.Errorf("can't initialize with different types"), nil
+		}
+
+		err := this.addVariableSymbol(node.token.tokenValue, variableSymbolType, node)
+		if err != nil {
+			return err, nil
+		}
+
+		err, symbol := this.searchSymbol(node.token.tokenValue)
+		
+		if err != nil {
+			return err, nil
+		}
+
+		return nil, &symbol.simbolType
 	}
 
 	return fmt.Errorf("Can't check type"), nil
 }
 
-func (this *Checker) enterScope() {
-	this.currentScope ++
+func (this *Checker) enterScope(node *Node) {
+	symbolTable := make(SymbolTable)
+	node.symbolTable = &symbolTable
+	this.symbolTables.push(&symbolTable)
 }
 
 func (this *Checker) leaveScope() {
-	delete(this.symbolTable, this.currentScope)
+	this.symbolTables.pop()
+}
 
-	this.currentScope --
+func (this *Checker) implementsInterface(leftSymbol *Symbol, rightSymbol *Symbol) bool {
+	for _, member := range (*leftSymbol.node.symbolTable) {
+		value, ok := (*rightSymbol.node.symbolTable)[member.name]
+		if !ok {
+			return false
+		}
+
+		if value.simbolType.kind != TYPE_FUNCTION {
+			continue
+		}
+
+		if value.simbolType.signature.returnType != member.simbolType.signature.returnType {
+			return false
+		}
+
+		if len(value.simbolType.signature.parameterTypes) != len(member.simbolType.signature.parameterTypes) {
+			return false
+		}
+
+		for index, parameterType := range value.simbolType.signature.parameterTypes {
+			if parameterType != member.simbolType.signature.parameterTypes[index] {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func (this *Checker) isAssignable(leftType string, rightType string) bool {
+	if leftType == rightType {
+		return true
+	}
+
+	err, leftSymbol := this.searchSymbol(leftType)
+	if err != nil {
+		return false
+	}
+
+	if leftSymbol.simbolType.kind != TYPE_INTERFACE {
+		return false
+	}
+
+	err, rightSymbol := this.searchSymbol(rightType)
+	if err != nil {
+		return false
+	}
+
+	if rightSymbol.simbolType.kind != TYPE_STRUCT {
+		return false
+	}
+
+	return this.implementsInterface(leftSymbol, rightSymbol)
+}
+
+func (this *Checker) addFunctionDeclaration(node *Node) (error, *Symbol) {
+	symbolName := node.token.tokenValue
+
+	var symbolType string
+	if node.left.left == nil {
+		symbolType = "void"
+	} else {
+		var err error
+		err, symbolType = this.getTypeFromNode(node.left.left)
+		if err != nil {
+			return err, nil
+		}
+	}
+
+	var signature []string
+	for parameter := node.right; parameter != nil; parameter = parameter.next {
+		err, parameterType := this.getTypeFromNode(parameter.left)
+		if err != nil {
+			return err, nil
+		}
+
+		signature = append(signature, parameterType)
+	}
+
+	return this.addFunctionSymbol(symbolName, symbolType, signature, node)
 }
 
 func (this *Checker) walk(node *Node) error {
+	err, _ := this.walkGetLastStatement(node)
+	
+	return err
+}
+
+func (this *Checker) walkGetLastStatement(node *Node) (error, *Node) {
+	var lastNode *Node = nil
 	for node != nil {
 		if node.nodeType == NODE_STRUCT {
 			structName := node.token.tokenValue
 
-			this.enterScope()
+			this.enterScope(node)
 			err := this.walk(node.right)
 			if err != nil {
-				return err
+				return err, nil
 			}
-
-			children := this.symbolTable[this.currentScope]
 			this.leaveScope()
 
-			err = this.addStructSymbol(structName, node, children)
+			err = this.addStructSymbol(structName, node)
 			if err != nil {
-				return err
+				return err, nil
 			}
-		} else if node.nodeType == NODE_VARIABLE_DECLARATION {
-			var initializationSymbolType string
-			if node.right != nil {
-				err, initializationSymbol := this.determineType(node.right)
-				if err != nil {
-					return err
-				}
+		} else if node.nodeType == NODE_IMPLEMENT {
+			structName := node.token.tokenValue
 
-				initializationSymbolType = initializationSymbol.name
-			}
-
-			var variableSymbolType string
-			if node.left != nil {
-				err, symbolType := this.getTypeFromNode(node.left)
-				if err != nil {
-					return err
-				}
-
-				variableSymbolType = symbolType
-			}
-
-			if variableSymbolType == "" {
-				variableSymbolType = initializationSymbolType
-			}
-
-			if initializationSymbolType != "" && variableSymbolType != initializationSymbolType {
-				return fmt.Errorf("can't initialize with different types")
-			}
-
-			err := this.addVariableSymbol(node.token.tokenValue, variableSymbolType, node)
+			err, symbol := this.searchSymbol(structName)
 			if err != nil {
-				return err
-			}
-		} else if node.nodeType == NODE_FUNCTION {
-			symbolName := node.left.token.tokenValue
-			err, symbolType := this.getTypeFromNode(node.left.left.left)
-			if err != nil {
-				return err
+				return err, nil
 			}
 
-			var signature []string
-			for parameter := node.left.right; parameter != nil; parameter = parameter.next {
-				err, parameterType := this.getTypeFromNode(parameter.left)
-				if err != nil {
-					return err
-				}
-
-				signature = append(signature, parameterType)
+			if symbol.simbolType.kind != TYPE_STRUCT {
+				return fmt.Errorf("Only structs can be implemented"), nil
 			}
 
-			err, symbol := this.addFunctionSymbol(symbolName, symbolType, signature, node)
-			if err != nil {
-				return err
-			}
-
-			this.functionStack.push(symbol)
-			this.enterScope()
-
-			err = this.walk(node.left.right)
-			if err != nil {
-				return err
-			}
+			// push the struct symbol table
+			this.symbolTables.push(symbol.node.symbolTable)
 
 			err = this.walk(node.right)
 			if err != nil {
-				return err
+				return err, nil
+			}
+
+			this.symbolTables.pop()
+		} else if node.nodeType == NODE_INTERFACE {
+			interfaceName := node.token.tokenValue
+
+			this.enterScope(node)
+
+			err := this.walk(node.right)
+			if err != nil {
+				return err, nil
+			}
+
+			this.leaveScope()
+
+			err = this.addInterfaceSymbol(interfaceName, node)
+			if err != nil {
+				return err, nil
+			}
+		} else if node.nodeType == NODE_FUNCTION_DECLARATION {
+			err, _ := this.addFunctionDeclaration(node)
+			if err != nil {
+				return err, nil
+			}
+		} else if node.nodeType == NODE_FUNCTION {
+			err, symbol := this.addFunctionDeclaration(node.left)
+			if err != nil {
+				return err, nil
+			}
+
+			this.functionStack.push(symbol)
+			this.enterScope(node)
+
+			err = this.walk(node.left.right)
+			if err != nil {
+				return err, nil
+			}
+
+			err, lastStatement := this.walkGetLastStatement(node.right)
+			if err != nil {
+				return err, nil
+			}
+
+			if symbol.simbolType.signature.returnType != "void" && (lastStatement == nil || lastStatement.nodeType != NODE_RETURN) {
+				return fmt.Errorf("function needs to end with return"), nil
 			}
 
 			this.leaveScope()
 			this.functionStack.pop()
 
 		} else if node.nodeType == NODE_IF {
+			this.enterScope(node)
+
 			err, symbolType := this.determineType(node.left)
 			if err != nil {
-				return err
+				return err, nil
 			}
 
 			if symbolType.name != "bool" {
-				return fmt.Errorf("Can't have non-bool in if")
+				return fmt.Errorf("Can't have non-bool in if"), nil
 			}
 
 			branchNode := node.right
 
-			this.enterScope()
+			if branchNode.left != nil {
+				this.enterScope(branchNode.left)
 
-			err = this.walk(branchNode.left)
-			if err != nil {
-				return err
-			}
-			this.leaveScope()
+				err = this.walk(branchNode.left)
+				if err != nil {
+					return err, nil
+				}
 
-			this.enterScope()
-			err = this.walk(branchNode.right)
-			if err != nil {
-				return err
+				this.leaveScope()
 			}
+
+			if branchNode.right != nil {
+				this.enterScope(branchNode.right)
+
+				err = this.walk(branchNode.right)
+				if err != nil {
+					return err, nil
+				}
+
+				this.leaveScope()
+			}
+
 			this.leaveScope()
 		} else if node.nodeType == NODE_ASSIGNMENT {
 			err, leftSymbolType := this.determineType(node.left)
 			if err != nil {
-				return err
+				return err, nil
 			}
 
 			err, rightSymbolType := this.determineType(node.right)
 			if err != nil {
-				return err
+				return err, nil
 			}
 
-			if leftSymbolType != rightSymbolType {
-				return fmt.Errorf("Can't assign different types")
+			if !this.isAssignable(leftSymbolType.name, rightSymbolType.name) {
+				return fmt.Errorf("Can't assign different types"), nil
 			}
 		} else if node.nodeType == NODE_RETURN {
 			err, symbolType := this.determineType(node.left)
 			if err != nil {
-				return err
+				return err, nil
 			}
 
 			currentFunction := this.functionStack.peek()
 			if currentFunction == nil {
-				return fmt.Errorf("Return can only be inside a function")
+				return fmt.Errorf("Return can only be inside a function"), nil
 			}
 
-			if currentFunction.simbolType.name != symbolType.name {
-				return fmt.Errorf("Invalid return type")
+			if currentFunction.simbolType.signature.returnType != symbolType.name {
+				return fmt.Errorf("Invalid return type"), nil
 			}
 		} else {
-			return fmt.Errorf("Invalid node")
+			err, _ := this.determineType(node)
+			if err != nil {
+				return err, nil
+			}
 		}
 
+		lastNode = node
 		node = node.next
 	}
 
-	return nil
+	return nil, lastNode
 }
 
 func (this *Checker) Check() error {
 	for _, asts := range this.modules {
+		this.enterScope(asts[0])
+
 		err := this.walk(asts[0].right)
 		if err != nil {
 			return err
 		}
+
+		this.leaveScope()
 	}
 
 	return nil
