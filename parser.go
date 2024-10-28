@@ -845,7 +845,7 @@ func (this *Parser) parseWhile() (error, *Node) {
 	}
 
 	whileNode := &Node{
-		nodeType: NODE_IF,
+		nodeType: NODE_WHILE,
 		left:     expressionNode,
 		right:    &branchNode,
 	}

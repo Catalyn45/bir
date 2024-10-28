@@ -109,10 +109,6 @@ func (this *Checker) addFunctionSymbol(functionName string, returnType string, p
 }
 
 func (this *Checker) addStructSymbol(structName string, node *Node) error {
-	if this.symbolAlreadyExists(structName) {
-		return fmt.Errorf("struct already declared in current scope")
-	}
-
 	lastScope := *this.symbolTables.peek()
 
 	lastScope[structName] = &Symbol {
@@ -130,10 +126,6 @@ func (this *Checker) addStructSymbol(structName string, node *Node) error {
 }
 
 func (this *Checker) addInterfaceSymbol(interfaceName string, node *Node) error {
-	if this.symbolAlreadyExists(interfaceName) {
-		return fmt.Errorf("interface already declared in current scope")
-	}
-
 	lastScope := *this.symbolTables.peek()
 
 	lastScope[interfaceName] = &Symbol {
@@ -545,7 +537,7 @@ func (this *Checker) addFunctionDeclaration(node *Node) (error, *Symbol) {
 	return this.addFunctionSymbol(symbolName, symbolType, signature, node)
 }
 
-func (this *Checker) walk(node *Node) error {
+func (this *Checker) walkStatements(node *Node) error {
 	err, _ := this.walkGetLastStatement(node)
 	
 	return err
@@ -554,89 +546,7 @@ func (this *Checker) walk(node *Node) error {
 func (this *Checker) walkGetLastStatement(node *Node) (error, *Node) {
 	var lastNode *Node = nil
 	for node != nil {
-		if node.nodeType == NODE_STRUCT {
-			structName := node.token.tokenValue
-
-			this.enterScope(node)
-			err := this.walk(node.right)
-			if err != nil {
-				return err, nil
-			}
-			this.leaveScope()
-
-			err = this.addStructSymbol(structName, node)
-			if err != nil {
-				return err, nil
-			}
-		} else if node.nodeType == NODE_IMPLEMENT {
-			structName := node.token.tokenValue
-
-			err, symbol := this.searchSymbol(structName)
-			if err != nil {
-				return err, nil
-			}
-
-			if symbol.simbolType.kind != TYPE_STRUCT {
-				return fmt.Errorf("Only structs can be implemented"), nil
-			}
-
-			// push the struct symbol table
-			this.symbolTables.push(symbol.node.symbolTable)
-
-			err = this.walk(node.right)
-			if err != nil {
-				return err, nil
-			}
-
-			this.symbolTables.pop()
-		} else if node.nodeType == NODE_INTERFACE {
-			interfaceName := node.token.tokenValue
-
-			this.enterScope(node)
-
-			err := this.walk(node.right)
-			if err != nil {
-				return err, nil
-			}
-
-			this.leaveScope()
-
-			err = this.addInterfaceSymbol(interfaceName, node)
-			if err != nil {
-				return err, nil
-			}
-		} else if node.nodeType == NODE_FUNCTION_DECLARATION {
-			err, _ := this.addFunctionDeclaration(node)
-			if err != nil {
-				return err, nil
-			}
-		} else if node.nodeType == NODE_FUNCTION {
-			err, symbol := this.addFunctionDeclaration(node.left)
-			if err != nil {
-				return err, nil
-			}
-
-			this.functionStack.push(symbol)
-			this.enterScope(node)
-
-			err = this.walk(node.left.right)
-			if err != nil {
-				return err, nil
-			}
-
-			err, lastStatement := this.walkGetLastStatement(node.right)
-			if err != nil {
-				return err, nil
-			}
-
-			if symbol.simbolType.signature.returnType != "void" && (lastStatement == nil || lastStatement.nodeType != NODE_RETURN) {
-				return fmt.Errorf("function needs to end with return"), nil
-			}
-
-			this.leaveScope()
-			this.functionStack.pop()
-
-		} else if node.nodeType == NODE_IF {
+		if node.nodeType == NODE_IF || node.nodeType == NODE_WHILE {
 			this.enterScope(node)
 
 			err, symbolType := this.determineType(node.left)
@@ -653,7 +563,7 @@ func (this *Checker) walkGetLastStatement(node *Node) (error, *Node) {
 			if branchNode.left != nil {
 				this.enterScope(branchNode.left)
 
-				err = this.walk(branchNode.left)
+				err = this.walkStatements(branchNode.left)
 				if err != nil {
 					return err, nil
 				}
@@ -664,7 +574,7 @@ func (this *Checker) walkGetLastStatement(node *Node) (error, *Node) {
 			if branchNode.right != nil {
 				this.enterScope(branchNode.right)
 
-				err = this.walk(branchNode.right)
+				err = this.walkStatements(branchNode.right)
 				if err != nil {
 					return err, nil
 				}
@@ -713,6 +623,176 @@ func (this *Checker) walkGetLastStatement(node *Node) (error, *Node) {
 	}
 
 	return nil, lastNode
+}
+
+func (this *Checker) addSymbolHeader (value string, typeType int, node *Node) error {
+	if this.symbolAlreadyExists(value) {
+		return fmt.Errorf("struct already declared in current scope")
+	}
+
+	lastScope := *this.symbolTables.peek()
+
+	lastScope[value] = &Symbol {
+		name: value,
+		simbolType: SymbolType {
+			kind: typeType,
+		},
+		node: node,
+	}
+
+	node.symbol = lastScope[value]
+
+	return nil
+}
+
+func (this *Checker) walkRootTypes (node *Node) error {
+	for node != nil {
+		if node.nodeType == NODE_STRUCT {
+			err := this.addSymbolHeader(node.token.tokenValue, TYPE_STRUCT, node)
+			if err != nil {
+				return err
+			}
+
+			// create the symbol table early in case implement statement appear before struct declaration statement
+			this.enterScope(node)
+			this.leaveScope()
+		} else if node.nodeType == NODE_INTERFACE {
+			err := this.addSymbolHeader(node.token.tokenValue, TYPE_INTERFACE, node)
+			if err != nil {
+				return err
+			}
+		}
+
+		node = node.next
+	}
+
+	return nil
+}
+
+func (this *Checker) walkRootDefinitions (node *Node) error {
+	for node != nil {
+		if node.nodeType == NODE_STRUCT {
+			structName := node.token.tokenValue
+
+			this.symbolTables.push(node.symbolTable)
+			
+			err := this.walkStatements(node.right)
+			if err != nil {
+				return err
+			}
+
+			this.symbolTables.pop()
+
+			err = this.addStructSymbol(structName, node)
+			if err != nil {
+				return err
+			}
+		} else if node.nodeType == NODE_IMPLEMENT {
+			structName := node.token.tokenValue
+
+			err, symbol := this.searchSymbol(structName)
+			if err != nil {
+				return err
+			}
+
+			if symbol.simbolType.kind != TYPE_STRUCT {
+				return fmt.Errorf("Only structs can be implemented")
+			}
+
+			// push the struct symbol table
+			this.symbolTables.push(symbol.node.symbolTable)
+
+			err = this.walkRootDefinitions(node.right)
+			if err != nil {
+				return err
+			}
+
+			this.symbolTables.pop()
+		} else if node.nodeType == NODE_INTERFACE {
+			interfaceName := node.token.tokenValue
+
+			this.enterScope(node)
+
+			err := this.walkRootDefinitions(node.right)
+			if err != nil {
+				return err
+			}
+
+			this.leaveScope()
+
+			err = this.addInterfaceSymbol(interfaceName, node)
+			if err != nil {
+				return err
+			}
+		} else if node.nodeType == NODE_FUNCTION {
+			err, _ := this.addFunctionDeclaration(node.left)
+			if err != nil {
+				return err
+			}
+		} else if node.nodeType == NODE_FUNCTION_DECLARATION {
+			err, _ := this.addFunctionDeclaration(node)
+			if err != nil {
+				return err
+			}
+		}
+
+		node = node.next
+	}
+
+	return nil
+}
+
+func (this *Checker) walkRoot (node *Node) error {
+	for node != nil {
+		if node.nodeType == NODE_IMPLEMENT {
+			err := this.walkRoot(node.right)
+			if err != nil {
+				return err
+			}
+		} else if node.nodeType == NODE_FUNCTION {
+			symbol := node.left.symbol
+
+			this.functionStack.push(symbol)
+			this.enterScope(node)
+
+			err := this.walkStatements(node.left.right)
+			if err != nil {
+				return err
+			}
+
+			err, lastStatement := this.walkGetLastStatement(node.right)
+			if err != nil {
+				return err
+			}
+
+			if symbol.simbolType.signature.returnType != "void" && (lastStatement == nil || lastStatement.nodeType != NODE_RETURN) {
+				return fmt.Errorf("function needs to end with return")
+			}
+
+			this.leaveScope()
+			this.functionStack.pop()
+		} else {
+			this.walkStatements(node)
+		}
+
+		node = node.next
+	}
+
+	return nil
+}
+
+func (this *Checker) walk(node *Node) error {
+	err := this.walkRootTypes(node)
+	if err != nil {
+		return err
+	}
+
+	err = this.walkRootDefinitions(node)
+	if err != nil {
+		return err
+	}
+
+	return this.walkRoot(node)
 }
 
 func (this *Checker) Check() error {

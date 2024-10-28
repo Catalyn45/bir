@@ -3,7 +3,7 @@ package main
 import "os"
 
 func main() {
-	data, err := os.ReadFile("test.bir")
+	data, err := os.ReadFile("test2.bir")
 	if err != nil {
 		panic(err)
 	}
