@@ -1,9 +1,10 @@
 package main
 
 import "os"
+import "fmt"
 
-func main() {
-	data, err := os.ReadFile("test2.bir")
+func parseFile(fileName string) (error, *Node) {
+	data, err := os.ReadFile(fileName)
 	if err != nil {
 		panic(err)
 	}
@@ -15,14 +16,37 @@ func main() {
 
 	err, root := parser.Parse()
 	if err != nil {
-		panic(err)
+		return err, nil
 	}
 
+	fmt.Println("==============================================================================================================")
 	root.Dump(0, &[]int{}, "")
+	fmt.Println("==============================================================================================================")
 
-	checker := newChecker([]*Node {root})
+	return nil, root
+}
 
-	err = checker.Check()
+func main() {
+	programName := os.Args[0]
+	args := os.Args[1:]
+
+	if len(args) == 0 {
+		fmt.Printf("Usage: %s ./file1.bir [./file2.bir ...]", programName)
+	}
+
+	var roots []*Node
+	for _, arg := range args {
+		err, root := parseFile(arg)
+		if err != nil {
+			panic(err)
+		}
+
+		roots = append(roots, root)
+	}
+
+	checker := newChecker(roots)
+
+	err := checker.Check()
 	if err != nil {
 		panic(err)
 	}

@@ -669,7 +669,7 @@ func (this *Checker) walkRootTypes (node *Node) error {
 	return nil
 }
 
-func (this *Checker) walkRootDefinitions (node *Node) error {
+func (this *Checker) walkRootDeclarations (node *Node) error {
 	for node != nil {
 		if node.nodeType == NODE_STRUCT {
 			structName := node.token.tokenValue
@@ -702,7 +702,7 @@ func (this *Checker) walkRootDefinitions (node *Node) error {
 			// push the struct symbol table
 			this.symbolTables.push(symbol.node.symbolTable)
 
-			err = this.walkRootDefinitions(node.right)
+			err = this.walkRootDeclarations(node.right)
 			if err != nil {
 				return err
 			}
@@ -713,7 +713,7 @@ func (this *Checker) walkRootDefinitions (node *Node) error {
 
 			this.enterScope(node)
 
-			err := this.walkRootDefinitions(node.right)
+			err := this.walkRootDeclarations(node.right)
 			if err != nil {
 				return err
 			}
@@ -742,10 +742,10 @@ func (this *Checker) walkRootDefinitions (node *Node) error {
 	return nil
 }
 
-func (this *Checker) walkRoot (node *Node) error {
+func (this *Checker) walk (node *Node) error {
 	for node != nil {
 		if node.nodeType == NODE_IMPLEMENT {
-			err := this.walkRoot(node.right)
+			err := this.walk(node.right)
 			if err != nil {
 				return err
 			}
@@ -781,30 +781,37 @@ func (this *Checker) walkRoot (node *Node) error {
 	return nil
 }
 
-func (this *Checker) walk(node *Node) error {
+func (this *Checker) walkRoot(node *Node) error {
 	err := this.walkRootTypes(node)
 	if err != nil {
 		return err
 	}
 
-	err = this.walkRootDefinitions(node)
-	if err != nil {
-		return err
-	}
-
-	return this.walkRoot(node)
+	return this.walkRootDeclarations(node)
 }
 
 func (this *Checker) Check() error {
 	for _, asts := range this.modules {
-		this.enterScope(asts[0])
+		symbolTable := make(SymbolTable)
+		this.symbolTables.push(&symbolTable)
 
-		err := this.walk(asts[0].right)
-		if err != nil {
-			return err
+		for _, ast := range asts {
+			ast.symbolTable = &symbolTable
+
+			err := this.walkRoot(ast.right)
+			if err != nil {
+				return err
+			}
 		}
 
-		this.leaveScope()
+		for _, ast := range asts {
+			err := this.walk(ast.right)
+			if err != nil {
+				return err
+			}
+		}
+
+		this.symbolTables.pop()
 	}
 
 	return nil
