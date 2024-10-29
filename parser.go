@@ -90,6 +90,7 @@ type Node struct {
 	next     *Node
 	symbolTable *SymbolTable
 	symbol *Symbol
+	imports []string
 }
 
 func (this *Node) ToString() string {

@@ -1,13 +1,10 @@
 module main
 
-struct S {
-	a: int
-}
+import map
+
 
 function main(): int {
-	var s = S()
-
-    test(s)
+	map.test()
 
 	return 0
 }

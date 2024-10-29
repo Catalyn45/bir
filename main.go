@@ -32,6 +32,7 @@ func main() {
 
 	if len(args) == 0 {
 		fmt.Printf("Usage: %s ./file1.bir [./file2.bir ...]", programName)
+		args = []string {"test.bir", "test2.bir"}
 	}
 
 	var roots []*Node

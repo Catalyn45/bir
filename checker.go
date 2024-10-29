@@ -3,6 +3,7 @@ package main
 import "fmt"
 
 const (
+	TYPE_MODULE   = iota
 	TYPE_CONST    = iota
 	TYPE_LITERAL  = iota
 	TYPE_VARIABLE = iota
@@ -34,6 +35,7 @@ type Checker struct {
 	modules map[string][]*Node
 	symbolTables  *Stack[*SymbolTable]
 	functionStack *Stack[*Symbol]
+	imports []string
 }
 
 func newChecker(asts []*Node) *Checker {
@@ -143,12 +145,32 @@ func (this *Checker) addInterfaceSymbol(interfaceName string, node *Node) error 
 }
 
 func (this *Checker) searchSymbolType(symbolName string) (error, *SymbolType) {
+	for _, imp := range this.imports {
+		if imp == symbolName {
+			return nil, &SymbolType {
+				kind: TYPE_MODULE,
+				name: imp,
+			}
+		}
+	}
+
 	err, symbol := this.searchSymbol(symbolName)
 	if err != nil {
 		return err, nil
 	}
 
 	return nil, &symbol.simbolType
+}
+
+func (this *Checker) searchSymbolInModule(module string, symbolName string) (error, *Symbol) {
+	for _, node := range this.modules[module] {
+		value, ok := (*node.symbolTable)[symbolName]
+		if ok {
+			return nil, value
+		}
+	}
+
+	return fmt.Errorf("couldn't find symbol in module"), nil
 }
 
 func (this *Checker) searchSymbol(symbolName string) (error, *Symbol) {
@@ -382,9 +404,19 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 			return err, nil
 		}
 
-		err, symbol := this.searchSymbol(memberType.name)
-		if err != nil {
-			return err, nil
+		var symbol *Symbol
+		if memberType.kind == TYPE_MODULE {
+			err, symbol = this.searchSymbolInModule(memberType.name, node.token.tokenValue)
+			if err != nil {
+				return err, nil
+			}
+
+			return nil, &symbol.simbolType
+		} else {
+			err, symbol = this.searchSymbol(memberType.name)
+			if err != nil {
+				return err, nil
+			}
 		}
 
 		if symbol.simbolType.kind != TYPE_STRUCT && symbol.simbolType.kind != TYPE_INTERFACE {
@@ -742,7 +774,7 @@ func (this *Checker) walkRootDeclarations (node *Node) error {
 	return nil
 }
 
-func (this *Checker) walk (node *Node) error {
+func (this *Checker) walk(node *Node) error {
 	for node != nil {
 		if node.nodeType == NODE_IMPLEMENT {
 			err := this.walk(node.right)
@@ -781,6 +813,18 @@ func (this *Checker) walk (node *Node) error {
 	return nil
 }
 
+func (this *Checker) walkImports(node *Node) error {
+	var imports []string = nil
+
+	for imp := node.right; imp != nil; imp = imp.next {
+		imports = append(imports, imp.left.token.tokenValue)
+	}
+
+	node.imports = imports
+
+	return nil
+}
+
 func (this *Checker) walkRoot(node *Node) error {
 	err := this.walkRootTypes(node)
 	if err != nil {
@@ -804,11 +848,32 @@ func (this *Checker) Check() error {
 			}
 		}
 
+		this.symbolTables.pop()
+	}
+
+	for _, asts := range this.modules {
+
+		pushed := false
+
 		for _, ast := range asts {
-			err := this.walk(ast.right)
+			if !pushed {
+				this.symbolTables.push(ast.symbolTable)
+				pushed = true
+			}
+
+			err := this.walkImports(ast.left)
 			if err != nil {
 				return err
 			}
+
+			this.imports = ast.left.imports
+
+			err = this.walk(ast.right)
+			if err != nil {
+				return err
+			}
+
+			this.imports = nil
 		}
 
 		this.symbolTables.pop()
