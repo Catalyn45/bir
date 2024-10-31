@@ -17,6 +17,7 @@ type Compiler struct {
 	irModule *ir.Module
 	symbolTables Stack[*SymbolTable]
 	currentFunction *ir.Func
+	blocks Stack[*ir.Block]
 }
 
 func newCompile(asts []*Node) *Compiler {
@@ -25,6 +26,7 @@ func newCompile(asts []*Node) *Compiler {
 		asts: asts,
 		irModule: m,
 		symbolTables: Stack[*SymbolTable]{},
+		blocks: Stack[*ir.Block]{},
 	}
 }
 
@@ -106,7 +108,7 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 	return fmt.Errorf("can't eval expression"), nil
 }
 
-func (this *Compiler) walk(node *Node, block *ir.Block) error {
+func (this *Compiler) walk(node *Node) error {
 	for node != nil {
 		if node.nodeType == NODE_VARIABLE_DECLARATION {
 			err, irType := this.converType(node.symbol.simbolType.name)
@@ -114,6 +116,7 @@ func (this *Compiler) walk(node *Node, block *ir.Block) error {
 				return err
 			}
 
+			block := this.blocks.peek()
 			node.symbol.value = block.NewAlloca(irType)
 		}
 
@@ -123,17 +126,15 @@ func (this *Compiler) walk(node *Node, block *ir.Block) error {
 				return err
 			}
 
+			block := this.blocks.pop()
+
 			// deref pointer in case of pointer type
 			// TODO don't do that if struct
 			if pointerType, ok := returnValue.Type().(*types.PointerType); ok {
 				returnValue = block.NewLoad(pointerType.ElemType, returnValue)
 			}
 
-			retBlock := this.currentFunction.NewBlock("")
-			
-			retBlock.NewRet(returnValue)
-
-			block.NewBr(retBlock)
+			block.NewRet(returnValue)
 		}
 
 		if node.nodeType == NODE_ASSIGNMENT {
@@ -147,6 +148,8 @@ func (this *Compiler) walk(node *Node, block *ir.Block) error {
 				return err
 			}
 
+			block := this.blocks.peek()
+
 			block.NewStore(assignmentValue, assignmentSource)
 		}
 
@@ -156,35 +159,36 @@ func (this *Compiler) walk(node *Node, block *ir.Block) error {
 				return err
 			}
 
-			// exitCtx := this.currentFunction.NewBlock("if.exit")
+			thenBlock := this.currentFunction.NewBlock("")
+			elseBlock := this.currentFunction.NewBlock("")
+			exitBlock := this.currentFunction.NewBlock("")
 
-			outerCtx := this.currentFunction.NewBlock("")
-
-			thenCtx := this.currentFunction.NewBlock("")
-			err = this.walk(node.right.left, thenCtx)
+			this.blocks.push(thenBlock)
+			err = this.walk(node.right.left)
 			if err != nil {
 				return err
 			}
 
-			thenCtx.NewRet(nil)
-
-			// thenCtx.NewBr(exitCtx)
-			// elseCtx := this.currentFunction.NewBlock("if.else")
-
-			// err = this.walk(node.right.right, thenCtx)
-			// if err != nil {
-			// 	return err
-			// }
-
-			// elseCtx.NewBr(exitCtx)
-
-			// exitCtx.NewRet(nil)
-
-
-			tr := outerCtx.NewCondBr(ifExpression, thenCtx, nil)
-			if tr != nil {
-				print(tr)
+			if thenBlock.Term == nil {
+				this.blocks.pop()
+				thenBlock.NewBr(exitBlock)
 			}
+
+			this.blocks.push(elseBlock)
+			err = this.walk(node.right.right)
+			if err != nil {
+				return err
+			}
+
+			if elseBlock.Term == nil {
+				this.blocks.pop()
+				elseBlock.NewBr(exitBlock)
+			}
+
+			block := this.blocks.pop()
+			block.NewCondBr(ifExpression, thenBlock, elseBlock)
+
+			this.blocks.push(exitBlock)
 		}
 
 		node = node.next
@@ -225,7 +229,9 @@ func (this *Compiler) walkRoot(node *Node) error {
 			this.currentFunction = function
 
 			block := function.NewBlock("")
-			err = this.walk(node.right, block)
+
+			this.blocks.push(block)
+			err = this.walk(node.right)
 			if err != nil {
 				return err
 			}

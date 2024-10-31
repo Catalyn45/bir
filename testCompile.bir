@@ -5,10 +5,14 @@ function main(argc: int): int {
 	a = 10
 
 	if true {
-		var z: int
-	}
+		return 20
+	} else {
+        a = 20
+    }
 
-	var aaa: int
+    if false {
+        return 40
+    }
 
-	return 10
+	return a
 }
