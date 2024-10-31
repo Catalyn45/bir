@@ -1,0 +1,14 @@
+module main
+
+function main(argc: int): int {
+	var a: int
+	a = 10
+
+	if true {
+		var z: int
+	}
+
+	var aaa: int
+
+	return 10
+}

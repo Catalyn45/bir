@@ -27,27 +27,42 @@ func parseFile(fileName string) (error, *Node) {
 }
 
 func main() {
-	programName := os.Args[0]
-	args := os.Args[1:]
+	// programName := os.Args[0]
+	// args := os.Args[1:]
+	//
+	// if len(args) == 0 {
+	// 	fmt.Printf("Usage: %s ./file1.bir [./file2.bir ...]", programName)
+	// 	args = []string {"test.bir", "test2.bir"}
+	// }
+	//
+	// var roots []*Node
+	// for _, arg := range args {
+	// 	err, root := parseFile(arg)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	//
+	// 	roots = append(roots, root)
+	// }
+	//
+	// checker := newChecker(roots)
+	//
+	// err := checker.Check()
+	// if err != nil {
+	// 	panic(err)
+	// }
 
-	if len(args) == 0 {
-		fmt.Printf("Usage: %s ./file1.bir [./file2.bir ...]", programName)
-		args = []string {"test.bir", "test2.bir"}
+	err, node := parseFile("testCompile.bir")
+	if err != nil {
+		panic(err)
 	}
 
-	var roots []*Node
-	for _, arg := range args {
-		err, root := parseFile(arg)
-		if err != nil {
-			panic(err)
-		}
+	checker := newChecker([]*Node{node})
 
-		roots = append(roots, root)
-	}
+	checker.Check()
 
-	checker := newChecker(roots)
-
-	err := checker.Check()
+	compiler := newCompile([]*Node{node})
+	err = compiler.Compile()
 	if err != nil {
 		panic(err)
 	}

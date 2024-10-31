@@ -1,6 +1,10 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/llir/llvm/ir/value"
+)
 
 const (
 	TYPE_MODULE   = iota
@@ -12,8 +16,13 @@ const (
 	TYPE_INTERFACE = iota
 )
 
+type Parameter struct {
+	name string
+	paramType string
+}
+
 type Signature struct {
-	parameterTypes[] string
+	parameters[] *Parameter
 	returnType string
 }
 
@@ -27,6 +36,7 @@ type Symbol struct {
 	name       string
 	simbolType SymbolType
 	node 	   *Node
+	value      value.Value
 }
 
 type SymbolTable map[string]*Symbol
@@ -85,7 +95,7 @@ func (this *Checker) addVariableSymbol(varName string, varType string, node *Nod
 	return nil
 }
 
-func (this *Checker) addFunctionSymbol(functionName string, returnType string, parametersTypes []string, node *Node) (error, *Symbol) {
+func (this *Checker) addFunctionSymbol(functionName string, returnType string, parametersTypes []*Parameter, node *Node) (error, *Symbol) {
 	if this.symbolAlreadyExists(functionName) {
 		return fmt.Errorf("function already declared in current scope"), nil
 	}
@@ -98,7 +108,7 @@ func (this *Checker) addFunctionSymbol(functionName string, returnType string, p
 			kind: TYPE_FUNCTION,
 			name: functionName,
 			signature: &Signature {
-				parameterTypes: parametersTypes,
+				parameters: parametersTypes,
 				returnType: returnType,
 			},
 		},
@@ -385,12 +395,12 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 			argumentTypes = append(argumentTypes, argumentType.name)
 		}
 
-		if len(parameterTypes.parameterTypes) != len(argumentTypes) {
+		if len(parameterTypes.parameters) != len(argumentTypes) {
 			return fmt.Errorf("Not the same number of arguments"), nil
 		}
 
-		for i := 0; i < len(parameterTypes.parameterTypes); i++ {
-			if !this.isAssignable(parameterTypes.parameterTypes[i], argumentTypes[i]) {
+		for i := 0; i < len(parameterTypes.parameters); i++ {
+			if !this.isAssignable(parameterTypes.parameters[i].paramType, argumentTypes[i]) {
 				return fmt.Errorf("Invalid argument type for parameter"), nil
 			}
 		}
@@ -466,7 +476,6 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 		}
 
 		err, symbol := this.searchSymbol(node.token.tokenValue)
-		
 		if err != nil {
 			return err, nil
 		}
@@ -502,12 +511,12 @@ func (this *Checker) implementsInterface(leftSymbol *Symbol, rightSymbol *Symbol
 			return false
 		}
 
-		if len(value.simbolType.signature.parameterTypes) != len(member.simbolType.signature.parameterTypes) {
+		if len(value.simbolType.signature.parameters) != len(member.simbolType.signature.parameters) {
 			return false
 		}
 
-		for index, parameterType := range value.simbolType.signature.parameterTypes {
-			if parameterType != member.simbolType.signature.parameterTypes[index] {
+		for index, parameterType := range value.simbolType.signature.parameters {
+			if parameterType != member.simbolType.signature.parameters[index] {
 				return false
 			}
 		}
@@ -556,14 +565,18 @@ func (this *Checker) addFunctionDeclaration(node *Node) (error, *Symbol) {
 		}
 	}
 
-	var signature []string
+	var signature []*Parameter
 	for parameter := node.right; parameter != nil; parameter = parameter.next {
 		err, parameterType := this.getTypeFromNode(parameter.left)
 		if err != nil {
 			return err, nil
 		}
 
-		signature = append(signature, parameterType)
+		signature = append(signature, &Parameter {
+				name: parameter.token.tokenValue,
+				paramType: parameterType,
+			},
+		)
 	}
 
 	return this.addFunctionSymbol(symbolName, symbolType, signature, node)
