@@ -1,18 +1,9 @@
 module main
 
-function main(argc: int): int {
-	var a: int
-	a = 10
-
-	if true {
-		return 20
-	} else {
-        a = 20
+function main(): int {
+    if 10 + 10 as a > 10 {
+        return a
     }
 
-    if false {
-        return 40
-    }
-
-	return a
+    return 1
 }

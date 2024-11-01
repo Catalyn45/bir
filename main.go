@@ -1,7 +1,10 @@
 package main
 
-import "os"
-import "fmt"
+import (
+	"fmt"
+	"os"
+	"os/exec"
+)
 
 func parseFile(fileName string) (error, *Node) {
 	data, err := os.ReadFile(fileName)
@@ -59,11 +62,25 @@ func main() {
 
 	checker := newChecker([]*Node{node})
 
-	checker.Check()
+	err = checker.Check()
+	if err != nil {
+		panic(err)
+	}
 
 	compiler := newCompile([]*Node{node})
 	err = compiler.Compile()
 	if err != nil {
 		panic(err)
+	}
+
+	cmd := exec.Command("./output.exe")
+
+	err = cmd.Run()
+	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			fmt.Printf("Command finished with exit code: %d\n", exitError.ExitCode())
+		} else {
+			panic(err)
+		}
 	}
 }

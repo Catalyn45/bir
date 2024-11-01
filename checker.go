@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-
 	"github.com/llir/llvm/ir/value"
 )
 
@@ -14,11 +13,13 @@ const (
 	TYPE_FUNCTION = iota
 	TYPE_STRUCT   = iota
 	TYPE_INTERFACE = iota
+	TYPE_EXPRESSION = iota
 )
 
 type Parameter struct {
 	name string
 	paramType string
+	node *Node
 }
 
 type Signature struct {
@@ -247,7 +248,11 @@ func (this *Checker) expressionAllowed(node *Node, expressionType string) bool {
  	if node.token.tokenType == TOKEN_LESS ||
 		node.token.tokenType == TOKEN_LESS_EQUAL ||
 		node.token.tokenType == TOKEN_GREATER ||
-		node.token.tokenType == TOKEN_GREATER_EQUAL {
+		node.token.tokenType == TOKEN_GREATER_EQUAL ||
+		node.token.tokenType == TOKEN_PLUS ||
+		node.token.tokenType == TOKEN_MINUS ||
+		node.token.tokenType == TOKEN_MULTIPLY ||
+		node.token.tokenType == TOKEN_DIVIDE {
 		switch expressionType {
 		case "int":
 			fallthrough
@@ -405,7 +410,10 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 			}
 		}
 
-		return nil, symbolType
+		return nil, &SymbolType {
+			name: symbolType.signature.returnType,
+			kind: TYPE_EXPRESSION,
+		}
 	}
 
 	if node.nodeType == NODE_MEMBER_ACCESS {
@@ -575,6 +583,7 @@ func (this *Checker) addFunctionDeclaration(node *Node) (error, *Symbol) {
 		signature = append(signature, &Parameter {
 				name: parameter.token.tokenValue,
 				paramType: parameterType,
+				node: parameter,
 			},
 		)
 	}
@@ -798,7 +807,7 @@ func (this *Checker) walk(node *Node) error {
 			symbol := node.left.symbol
 
 			this.functionStack.push(symbol)
-			this.enterScope(node)
+			this.enterScope(node.left)
 
 			err := this.walkStatements(node.left.right)
 			if err != nil {
@@ -865,14 +874,8 @@ func (this *Checker) Check() error {
 	}
 
 	for _, asts := range this.modules {
-
-		pushed := false
-
 		for _, ast := range asts {
-			if !pushed {
-				this.symbolTables.push(ast.symbolTable)
-				pushed = true
-			}
+			this.symbolTables.push(ast.symbolTable)
 
 			err := this.walkImports(ast.left)
 			if err != nil {
@@ -887,9 +890,9 @@ func (this *Checker) Check() error {
 			}
 
 			this.imports = nil
-		}
 
-		this.symbolTables.pop()
+			this.symbolTables.pop()
+		}
 	}
 
 	return nil

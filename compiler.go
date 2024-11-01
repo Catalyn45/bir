@@ -3,11 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 
 	"github.com/llir/llvm/ir"
 	"github.com/llir/llvm/ir/constant"
-	// "github.com/llir/llvm/ir/enum"
+	"github.com/llir/llvm/ir/enum"
 	"github.com/llir/llvm/ir/types"
 	"github.com/llir/llvm/ir/value"
 )
@@ -66,26 +67,101 @@ func (this *Compiler) converType(birType string) (error, types.Type) {
 	return fmt.Errorf("Invalid type, can't convert"), nil
 }
 
-func (this *Compiler) convertToValue(varType types.Type) types.Type {
-	if varType == types.I64Ptr {
-		return types.I64
+func (this *Compiler) walkBinaryExpression(node *Node) (error, value.Value) {
+	if node.nodeType != NODE_BINARY_EXPRESSION {
+		return fmt.Errorf("Not binary expression"), nil
 	}
 
-	return nil
+	block := this.blocks.peek()
+
+	err, leftValue := this.walkExpression(node.left)
+	if err != nil {
+		return err, nil
+	}
+
+	if pointerType, ok := leftValue.Type().(*types.PointerType); ok {
+		leftValue = block.NewLoad(pointerType.ElemType, leftValue)
+	}
+
+	err, rightValue := this.walkExpression(node.right)
+	if err != nil {
+		return err, nil
+	}
+
+	if pointerType, ok := rightValue.Type().(*types.PointerType); ok {
+		rightValue = block.NewLoad(pointerType.ElemType, rightValue)
+	}
+
+	if node.token.tokenType == TOKEN_PLUS {
+		return nil, block.NewAdd(leftValue, rightValue)
+	}
+
+	if node.token.tokenType == TOKEN_MINUS {
+		return nil, block.NewSub(leftValue, rightValue)
+	}
+
+	if node.token.tokenType == TOKEN_DIVIDE {
+		return nil, block.NewSDiv(leftValue, rightValue)
+	}
+
+	if node.token.tokenType == TOKEN_MULTIPLY {
+		return nil, block.NewMul(leftValue, rightValue)
+	}
+
+	if node.token.tokenType == TOKEN_AND {
+		return nil, block.NewAnd(leftValue, rightValue)
+	}
+
+	if node.token.tokenType == TOKEN_OR {
+		return nil, block.NewOr(leftValue, rightValue)
+	}
+
+	if node.token.tokenType == TOKEN_EQUAL {
+		return nil, block.NewICmp(enum.IPredEQ, leftValue, rightValue)
+	}
+
+	if node.token.tokenType == TOKEN_DIFFERENT {
+		return nil, block.NewICmp(enum.IPredNE, leftValue, rightValue)
+	}
+
+	if node.token.tokenType == TOKEN_GREATER {
+		return nil, block.NewICmp(enum.IPredSGT, leftValue, rightValue)
+	}
+
+	if node.token.tokenType == TOKEN_GREATER_EQUAL {
+		return nil, block.NewICmp(enum.IPredSGE, leftValue, rightValue)
+	}
+
+	if node.token.tokenType == TOKEN_LESS {
+		return nil, block.NewICmp(enum.IPredSLT, leftValue, rightValue)
+	}
+
+	if node.token.tokenType == TOKEN_LESS_EQUAL {
+		return nil, block.NewICmp(enum.IPredSLE, leftValue, rightValue)
+	}
+
+	return fmt.Errorf("invalid operation"), nil
 }
 
 func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
+	block := this.blocks.peek()
+
 	if node.nodeType == NODE_INT {
-		intValue, err := strconv.Atoi(node.token.tokenValue)
+		intValue, err := strconv.ParseInt(node.token.tokenValue, 10, 64)
 		if err != nil {
 			return err, nil
 		}
 
-		return nil, constant.NewInt(types.I64, int64(intValue))
+		return nil, constant.NewInt(types.I64, intValue)
 	}
 
 	if node.nodeType == NODE_FLOAT {
+		floatValue, err := strconv.ParseFloat(node.token.tokenValue, 64)
+		if err != nil {
+			return err, nil
+		}
 
+		return nil, constant.NewFloat(types.Float, floatValue)
 	}
 
 	if node.nodeType == NODE_BOOL {
@@ -105,21 +181,61 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 		return nil, symbol.value
 	}
 
+	if node.nodeType == NODE_BINARY_EXPRESSION {
+		return this.walkBinaryExpression(node)
+	}
+
+	if node.nodeType == NODE_CALL {
+		err, funcValue := this.walkExpression(node.left)
+		if err != nil {
+			return err, nil
+		}
+
+		var arguments []value.Value
+		for argument := node.right.right; argument != nil; argument = argument.next {
+			err, argumentValue := this.walkExpression(argument)
+			if err != nil {
+				return err, nil
+			}
+
+			if pointerType, ok := argumentValue.Type().(*types.PointerType); ok {
+				argumentValue = block.NewLoad(pointerType.ElemType, argumentValue)
+			}
+
+			arguments = append(arguments, argumentValue)
+		}
+
+		return nil, block.NewCall(funcValue, arguments...)
+	}
+
+	if node.nodeType == NODE_VARIABLE_DECLARATION {
+		err, irType := this.converType(node.symbol.simbolType.name)
+		if err != nil {
+			return err, nil
+		}
+
+		block := this.blocks.peek()
+		allocationValue := block.NewAlloca(irType)
+
+		node.symbol.value = allocationValue
+
+		if node.right != nil {
+			err, initValue := this.walkExpression(node.right)
+			if err != nil {
+				return err, nil
+			}
+
+			block.NewStore(initValue, allocationValue)
+		}
+
+		return nil, block.NewLoad(allocationValue.ElemType, allocationValue)
+	}
+
 	return fmt.Errorf("can't eval expression"), nil
 }
 
 func (this *Compiler) walk(node *Node) error {
 	for node != nil {
-		if node.nodeType == NODE_VARIABLE_DECLARATION {
-			err, irType := this.converType(node.symbol.simbolType.name)
-			if err != nil {
-				return err
-			}
-
-			block := this.blocks.peek()
-			node.symbol.value = block.NewAlloca(irType)
-		}
-
 		if node.nodeType == NODE_RETURN {
 			err, returnValue := this.walkExpression(node.left)
 			if err != nil {
@@ -135,9 +251,7 @@ func (this *Compiler) walk(node *Node) error {
 			}
 
 			block.NewRet(returnValue)
-		}
-
-		if node.nodeType == NODE_ASSIGNMENT {
+		} else if node.nodeType == NODE_ASSIGNMENT {
 			err, assignmentSource := this.walkExpression(node.left)
 			if err != nil {
 				return err
@@ -151,9 +265,7 @@ func (this *Compiler) walk(node *Node) error {
 			block := this.blocks.peek()
 
 			block.NewStore(assignmentValue, assignmentSource)
-		}
-
-		if node.nodeType == NODE_IF {
+		} else if node.nodeType == NODE_IF {
 			err, ifExpression := this.walkExpression(node.left)
 			if err != nil {
 				return err
@@ -163,7 +275,11 @@ func (this *Compiler) walk(node *Node) error {
 			elseBlock := this.currentFunction.NewBlock("")
 			exitBlock := this.currentFunction.NewBlock("")
 
+			this.symbolTables.push(node.symbolTable)
+
+			this.symbolTables.push(node.right.left.symbolTable)
 			this.blocks.push(thenBlock)
+
 			err = this.walk(node.right.left)
 			if err != nil {
 				return err
@@ -173,11 +289,19 @@ func (this *Compiler) walk(node *Node) error {
 				this.blocks.pop()
 				thenBlock.NewBr(exitBlock)
 			}
+			this.symbolTables.pop()
 
 			this.blocks.push(elseBlock)
-			err = this.walk(node.right.right)
-			if err != nil {
-				return err
+
+			if node.right.right != nil {
+				this.symbolTables.push(node.right.right.symbolTable)
+
+				err = this.walk(node.right.right)
+				if err != nil {
+					return err
+				}
+
+				this.symbolTables.pop()
 			}
 
 			if elseBlock.Term == nil {
@@ -188,7 +312,14 @@ func (this *Compiler) walk(node *Node) error {
 			block := this.blocks.pop()
 			block.NewCondBr(ifExpression, thenBlock, elseBlock)
 
+			this.symbolTables.pop()
+
 			this.blocks.push(exitBlock)
+		} else {
+			err, _ := this.walkExpression(node)
+			if err != nil {
+				return err
+			}
 		}
 
 		node = node.next
@@ -200,7 +331,7 @@ func (this *Compiler) walk(node *Node) error {
 func (this *Compiler) walkRoot(node *Node) error {
 	for node != nil {
 		if node.nodeType == NODE_FUNCTION {
-			this.symbolTables.push(node.symbolTable)
+			this.symbolTables.push(node.left.symbolTable)
 
 			symbol := node.left.symbol
 			birSignature := symbol.simbolType.signature
@@ -217,7 +348,11 @@ func (this *Compiler) walkRoot(node *Node) error {
 					return err
 				}
 
-				signature = append(signature, ir.NewParam(birparam.name, paramType))
+				parameter := ir.NewParam(birparam.name, paramType)
+
+				birparam.node.symbol.value = parameter
+
+				signature = append(signature, parameter)
 			}
 
 			function := this.irModule.NewFunc(
@@ -225,6 +360,8 @@ func (this *Compiler) walkRoot(node *Node) error {
 				returnType,
 				signature...
 			)
+
+			node.left.symbol.value = function
 
 			this.currentFunction = function
 
@@ -249,10 +386,14 @@ func (this *Compiler) walkRoot(node *Node) error {
 
 func (this *Compiler) Compile() error {
 	for _, ast := range this.asts {
+		this.symbolTables.push(ast.symbolTable)
+
 		err := this.walkRoot(ast.right)
 		if err != nil {
 			return err
 		}
+
+		this.symbolTables.pop()
 	}
 
 	program := this.irModule.String()
@@ -260,6 +401,16 @@ func (this *Compiler) Compile() error {
 	fmt.Println(program)
 
 	err := os.WriteFile("main.ll", []byte(program), 0644)
+	if err != nil {
+		return err
+	}
+
+	cmd := exec.Command("clang", "main.ll", "-o", "output.exe")
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err = cmd.Run()
 	if err != nil {
 		return err
 	}
