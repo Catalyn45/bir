@@ -21,7 +21,7 @@ type Compiler struct {
 	blocks Stack[*ir.Block]
 }
 
-func newCompile(asts []*Node) *Compiler {
+func newCompiler(asts []*Node) *Compiler {
 	m := ir.NewModule()
 	return &Compiler {
 		asts: asts,

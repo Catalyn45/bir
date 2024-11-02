@@ -168,6 +168,7 @@ type Parser struct {
 	currentToken *Token
 
 	asAllowed bool
+	startExpression *Node
 }
 
 func newParser(lexer *Lexer) *Parser {

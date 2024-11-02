@@ -1,9 +1,0 @@
-module main
-
-function main(): int {
-    if 10 + 10 as a > 10 {
-        return a
-    }
-
-    return 1
-}
