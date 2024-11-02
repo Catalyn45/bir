@@ -101,7 +101,11 @@ func (this *Compiler) walkBinaryExpression(node *Node) (error, value.Value) {
 	}
 
 	if node.token.tokenType == TOKEN_DIVIDE {
-		return nil, block.NewSDiv(leftValue, rightValue)
+		if leftValue.Type() == types.Float {
+			return nil, block.NewFDiv(leftValue, rightValue)
+		} else {
+			return nil, block.NewSDiv(leftValue, rightValue)
+		}
 	}
 
 	if node.token.tokenType == TOKEN_MULTIPLY {
@@ -117,27 +121,51 @@ func (this *Compiler) walkBinaryExpression(node *Node) (error, value.Value) {
 	}
 
 	if node.token.tokenType == TOKEN_EQUAL {
-		return nil, block.NewICmp(enum.IPredEQ, leftValue, rightValue)
+		if leftValue.Type() == types.Float {
+			return nil, block.NewFCmp(enum.FPredOEQ, leftValue, rightValue)
+		} else {
+			return nil, block.NewICmp(enum.IPredEQ, leftValue, rightValue)
+		}
 	}
 
 	if node.token.tokenType == TOKEN_DIFFERENT {
-		return nil, block.NewICmp(enum.IPredNE, leftValue, rightValue)
+		if leftValue.Type() == types.Float {
+			return nil, block.NewFCmp(enum.FPredONE, leftValue, rightValue)
+		} else {
+			return nil, block.NewICmp(enum.IPredNE, leftValue, rightValue)
+		}
 	}
 
 	if node.token.tokenType == TOKEN_GREATER {
-		return nil, block.NewICmp(enum.IPredSGT, leftValue, rightValue)
+		if leftValue.Type() == types.Float {
+			return nil, block.NewFCmp(enum.FPredOGT, leftValue, rightValue)
+		} else {
+			return nil, block.NewICmp(enum.IPredSGT, leftValue, rightValue)
+		}
 	}
 
 	if node.token.tokenType == TOKEN_GREATER_EQUAL {
-		return nil, block.NewICmp(enum.IPredSGE, leftValue, rightValue)
+		if leftValue.Type() == types.Float {
+			return nil, block.NewFCmp(enum.FPredOGE, leftValue, rightValue)
+		} else {
+			return nil, block.NewICmp(enum.IPredSGE, leftValue, rightValue)
+		}
 	}
 
 	if node.token.tokenType == TOKEN_LESS {
-		return nil, block.NewICmp(enum.IPredSLT, leftValue, rightValue)
+		if leftValue.Type() == types.Float {
+			return nil, block.NewFCmp(enum.FPredOLT, leftValue, rightValue)
+		} else {
+			return nil, block.NewICmp(enum.IPredSLT, leftValue, rightValue)
+		}
 	}
 
 	if node.token.tokenType == TOKEN_LESS_EQUAL {
-		return nil, block.NewICmp(enum.IPredSLE, leftValue, rightValue)
+		if leftValue.Type() == types.Float {
+			return nil, block.NewFCmp(enum.FPredOLE, leftValue, rightValue)
+		} else {
+			return nil, block.NewICmp(enum.IPredSLE, leftValue, rightValue)
+		}
 	}
 
 	return fmt.Errorf("invalid operation"), nil
