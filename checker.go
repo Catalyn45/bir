@@ -20,18 +20,19 @@ const (
 
 type Parameter struct {
 	name string
-	paramType string
+	paramType *SymbolType
 	node *Node
 }
 
 type Signature struct {
 	parameters[] *Parameter
-	returnType string
+	returnType *SymbolType
 }
 
 type SymbolType struct {
 	kind int
 	name string
+	symbol *Symbol
 	signature *Signature
 }
 
@@ -78,7 +79,7 @@ func (this *Checker) symbolAlreadyExists(symbolName string) bool {
 	return ok
 }
 
-func (this *Checker) addVariableSymbol(varName string, varType string, node *Node) error {
+func (this *Checker) addVariableSymbol(varName string, varType *SymbolType, node *Node) error {
 	if this.symbolAlreadyExists(varName) {
 		return fmt.Errorf("variable already declared in current scope")
 	}
@@ -87,10 +88,7 @@ func (this *Checker) addVariableSymbol(varName string, varType string, node *Nod
 
 	lastScope[varName] = &Symbol {
 		name: varName,
-		simbolType: SymbolType {
-			kind: TYPE_VARIABLE,
-			name: varType,
-		},
+		simbolType: *varType,
 		node: node,
 	}
 
@@ -99,7 +97,7 @@ func (this *Checker) addVariableSymbol(varName string, varType string, node *Nod
 	return nil
 }
 
-func (this *Checker) addFunctionSymbol(functionName string, returnType string, parametersTypes []*Parameter, node *Node) (error, *Symbol) {
+func (this *Checker) addFunctionSymbol(functionName string, returnType *SymbolType, parametersTypes []*Parameter, node *Node) (error, *Symbol) {
 	if this.symbolAlreadyExists(functionName) {
 		return fmt.Errorf("function already declared in current scope"), nil
 	}
@@ -120,6 +118,7 @@ func (this *Checker) addFunctionSymbol(functionName string, returnType string, p
 	}
 
 	node.symbol = lastScope[functionName]
+	lastScope[functionName].simbolType.symbol = node.symbol
 
 	return nil, lastScope[functionName]
 }
@@ -137,6 +136,7 @@ func (this *Checker) addStructSymbol(structName string, node *Node) error {
 	}
 
 	node.symbol = lastScope[structName]
+	lastScope[structName].simbolType.symbol = node.symbol
 
 	return nil
 }
@@ -154,26 +154,9 @@ func (this *Checker) addInterfaceSymbol(interfaceName string, node *Node) error 
 	}
 
 	node.symbol = lastScope[interfaceName]
+	lastScope[interfaceName].simbolType.symbol = node.symbol
 
 	return nil
-}
-
-func (this *Checker) searchSymbolType(symbolName string) (error, *SymbolType) {
-	for _, imp := range this.imports {
-		if imp == symbolName {
-			return nil, &SymbolType {
-				kind: TYPE_MODULE,
-				name: imp,
-			}
-		}
-	}
-
-	err, symbol := this.searchSymbol(symbolName)
-	if err != nil {
-		return err, nil
-	}
-
-	return nil, &symbol.simbolType
 }
 
 func (this *Checker) searchSymbolInModule(module string, symbolName string) (error, *Symbol) {
@@ -188,6 +171,15 @@ func (this *Checker) searchSymbolInModule(module string, symbolName string) (err
 }
 
 func (this *Checker) searchSymbol(symbolName string) (error, *Symbol) {
+	// for _, imp := range this.imports {
+	// 	if imp == symbolName {
+	// 		return nil, &SymbolType {
+	// 			kind: TYPE_MODULE,
+	// 			name: imp,
+	// 		}
+	// 	}
+	// }
+
 	var foundSymbol *Symbol = nil
 
 	this.symbolTables.foreach(func (item *SymbolTable) (stop bool) {
@@ -208,28 +200,33 @@ func (this *Checker) searchSymbol(symbolName string) (error, *Symbol) {
 	return nil, foundSymbol
 }
 
-func (this *Checker) getTypeFromNode(node *Node) (error, string) {
+func (this *Checker) getTypeFromNode(node *Node) (error, *SymbolType) {
 	if node.nodeType == NODE_INT_TYPE {
-		return nil, "int"
+		return nil, &SymbolType {kind: TYPE_LITERAL, name: "int"}
 	}
 
 	if node.nodeType == NODE_FLOAT_TYPE {
-		return nil, "float"
+		return nil, &SymbolType {kind: TYPE_LITERAL, name: "float"}
 	}
 
 	if node.nodeType == NODE_STRING_TYPE {
-		return nil, "string"
+		return nil, &SymbolType {kind: TYPE_LITERAL, name: "string"}
 	}
 
 	if node.nodeType == NODE_BOOL_TYPE {
-		return nil, "bool"
+		return nil, &SymbolType {kind: TYPE_LITERAL, name: "bool"}
 	}
 
 	if node.nodeType == NODE_CUSTOM_TYPE {
-		return nil, node.token.tokenValue
+		err, symbol := this.searchSymbol(node.token.tokenValue)
+		if err != nil {
+			return err, nil
+		}
+
+		return nil, &symbol.simbolType
 	}
 
-	return fmt.Errorf("Invalid node"), ""
+	return fmt.Errorf("Invalid node"), nil
 }
 
 func (this *Checker) expressionAllowed(node *Node, expressionType string) bool {
@@ -333,12 +330,14 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 	}
 
 	if node.nodeType == NODE_VARIABLE {
-		err, symbolType := this.searchSymbolType(node.token.tokenValue)
+		err, symbol := this.searchSymbol(node.token.tokenValue)
 		if err != nil {
 			return err, nil
 		}
 
-		return nil, symbolType
+		node.symbol = symbol
+
+		return nil, &symbol.simbolType
 	}
 
 	if node.nodeType == NODE_NOT {
@@ -393,14 +392,14 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 
 		parameterTypes := symbolType.signature
 
-		var argumentTypes []string
+		var argumentTypes []*SymbolType
 		for argument := node.right.right; argument != nil; argument = argument.next {
 			err, argumentType := this.determineType(argument)
 			if err != nil {
 				return err, nil
 			}
 
-			argumentTypes = append(argumentTypes, argumentType.name)
+			argumentTypes = append(argumentTypes, argumentType)
 		}
 
 		if len(parameterTypes.parameters) != len(argumentTypes) {
@@ -413,10 +412,7 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 			}
 		}
 
-		return nil, &SymbolType {
-			name: symbolType.signature.returnType,
-			kind: TYPE_EXPRESSION,
-		}
+		return nil, symbolType.signature.returnType
 	}
 
 	if node.nodeType == NODE_MEMBER_ACCESS {
@@ -453,17 +449,17 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 	}
 
 	if node.nodeType == NODE_VARIABLE_DECLARATION {
-		var initializationSymbolType string
+		var initializationSymbolType *SymbolType
 		if node.right != nil {
 			err, initializationSymbol := this.determineType(node.right)
 			if err != nil {
 				return err, nil
 			}
 
-			initializationSymbolType = initializationSymbol.name
+			initializationSymbolType = initializationSymbol
 		}
 
-		var variableSymbolType string
+		var variableSymbolType *SymbolType = nil
 		if node.left != nil {
 			err, symbolType := this.getTypeFromNode(node.left)
 			if err != nil {
@@ -473,11 +469,11 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 			variableSymbolType = symbolType
 		}
 
-		if variableSymbolType == "" {
+		if variableSymbolType == nil {
 			variableSymbolType = initializationSymbolType
 		}
 
-		if initializationSymbolType != "" && !this.isAssignable(variableSymbolType, initializationSymbolType) {
+		if initializationSymbolType != nil && !this.isAssignable(variableSymbolType, initializationSymbolType) {
 			return fmt.Errorf("can't initialize with different types"), nil
 		}
 
@@ -486,12 +482,7 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 			return err, nil
 		}
 
-		err, symbol := this.searchSymbol(node.token.tokenValue)
-		if err != nil {
-			return err, nil
-		}
-
-		return nil, &symbol.simbolType
+		return nil, &node.symbol.simbolType
 	}
 
 	return fmt.Errorf("Can't check type"), nil
@@ -536,38 +527,31 @@ func (this *Checker) implementsInterface(leftSymbol *Symbol, rightSymbol *Symbol
 	return true
 }
 
-func (this *Checker) isAssignable(leftType string, rightType string) bool {
-	if leftType == rightType {
+func (this *Checker) isAssignable(leftSymbolType *SymbolType, rightSymbolType *SymbolType) bool {
+	if leftSymbolType.name == rightSymbolType.name {
 		return true
 	}
 
-	err, leftSymbol := this.searchSymbol(leftType)
-	if err != nil {
+	if leftSymbolType.kind != TYPE_INTERFACE {
 		return false
 	}
 
-	if leftSymbol.simbolType.kind != TYPE_INTERFACE {
+	if leftSymbolType.kind != TYPE_STRUCT {
 		return false
 	}
 
-	err, rightSymbol := this.searchSymbol(rightType)
-	if err != nil {
-		return false
-	}
-
-	if rightSymbol.simbolType.kind != TYPE_STRUCT {
-		return false
-	}
-
-	return this.implementsInterface(leftSymbol, rightSymbol)
+	return this.implementsInterface(leftSymbolType.symbol, rightSymbolType.symbol)
 }
 
 func (this *Checker) addFunctionDeclaration(node *Node) (error, *Symbol) {
 	symbolName := node.token.tokenValue
 
-	var symbolType string
+	var symbolType *SymbolType
 	if node.left.left == nil {
-		symbolType = "void"
+		symbolType = &SymbolType {
+			kind: TYPE_LITERAL,
+			name: "void",
+		}
 	} else {
 		var err error
 		err, symbolType = this.getTypeFromNode(node.left.left)
@@ -651,7 +635,7 @@ func (this *Checker) walkGetLastStatement(node *Node) (error, *Node) {
 				return err, nil
 			}
 
-			if !this.isAssignable(leftSymbolType.name, rightSymbolType.name) {
+			if !this.isAssignable(leftSymbolType, rightSymbolType) {
 				return fmt.Errorf("Can't assign different types"), nil
 			}
 		} else if node.nodeType == NODE_RETURN {
@@ -665,7 +649,7 @@ func (this *Checker) walkGetLastStatement(node *Node) (error, *Node) {
 				return fmt.Errorf("Return can only be inside a function"), nil
 			}
 
-			if currentFunction.simbolType.signature.returnType != symbolType.name {
+			if currentFunction.simbolType.signature.returnType.name != symbolType.name {
 				return fmt.Errorf("Invalid return type"), nil
 			}
 		} else {
@@ -822,7 +806,7 @@ func (this *Checker) walk(node *Node) error {
 				return err
 			}
 
-			if symbol.simbolType.signature.returnType != "void" && (lastStatement == nil || lastStatement.nodeType != NODE_RETURN) {
+			if symbol.simbolType.signature.returnType.name != "void" && (lastStatement == nil || lastStatement.nodeType != NODE_RETURN) {
 				return fmt.Errorf("function needs to end with return")
 			}
 

@@ -54,8 +54,8 @@ func (this *Compiler) searchSymbol(symbolName string) (error, *Symbol) {
 	return nil, foundSymbol
 }
 
-func (this *Compiler) convertType(birType string) (error, types.Type) {
-	switch birType {
+func (this *Compiler) convertType(birType *SymbolType) (error, types.Type) {
+	switch birType.name {
 	case "int":
 		return nil, types.I64
 	case "float":
@@ -66,12 +66,7 @@ func (this *Compiler) convertType(birType string) (error, types.Type) {
 		return nil, types.Void
 	}
 
-	err, symbol := this.searchSymbol(birType)
-	if err != nil {
-		return err, nil
-	}
-
-	return nil, symbol.valueType
+	return nil, birType.symbol.valueType
 }
 
 func (this *Compiler) walkBinaryExpression(node *Node) (error, value.Value) {
@@ -184,10 +179,7 @@ func (this *Compiler) walkBinaryExpression(node *Node) (error, value.Value) {
 
 func (this *Compiler) walkLvalue(node *Node) (error, value.Value) {
 	if node.nodeType == NODE_VARIABLE {
-		err, symbol := this.searchSymbol(node.token.tokenValue)
-		if err != nil {
-			return err, nil
-		}
+		symbol := node.symbol
 
 		if symbol.value == nil {
 			block := this.blocks.peek()
@@ -209,23 +201,7 @@ func (this *Compiler) walkLvalue(node *Node) (error, value.Value) {
 		}
 
 		if _, ok := value.Type().(*types.StructType); ok {
-			err, symbol := this.searchSymbol(value.Type().Name())
-			if err != nil {
-				return err, nil
-			}
 
-			this.symbolTables.push(symbol.node.symbolTable)
-
-			err, symbol = this.searchSymbol(node.token.tokenValue)
-			if err != nil {
-				return err, nil
-			}
-
-			if symbol.node.nodeType == NODE_FUNCTION_DECLARATION {
-				this.currentInstance = value
-			}
-
-			return nil, symbol.value
 		}
 		
 		return nil, value
@@ -298,7 +274,7 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 	}
 
 	if node.nodeType == NODE_VARIABLE_DECLARATION {
-		err, irType := this.convertType(node.symbol.simbolType.name)
+		err, irType := this.convertType(&node.symbol.simbolType)
 		if err != nil {
 			return err, nil
 		}
@@ -427,7 +403,7 @@ func (this *Compiler) walkRoot(node *Node) error {
 
 			var fieldTypes []types.Type
 			for field := node.right; field != nil; field = field.next {
-				err, convertedType := this.convertType(field.symbol.simbolType.name)
+				err, convertedType := this.convertType(&field.symbol.simbolType)
 				if err != nil {
 					return err
 				}
@@ -441,9 +417,7 @@ func (this *Compiler) walkRoot(node *Node) error {
 
 			this.symbolTables.pop()
 		} else if node.nodeType == NODE_IMPLEMENT {
-			strcutName := node.token.tokenValue
-
-			err, found := this.searchSymbol(strcutName)
+			err, found := this.searchSymbol(node.token.tokenValue)
 			if err != nil {
 				return err
 			}
