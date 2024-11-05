@@ -765,7 +765,7 @@ func (this *Checker) walkRootDeclarations (node *Node) error {
 			if err != nil {
 				return err
 			}
-		} else if node.nodeType == NODE_FUNCTION {
+		} else if node.nodeType == NODE_FUNCTION || node.nodeType == NODE_CONSTRUCTOR {
 			err, _ := this.addFunctionDeclaration(node.left)
 			if err != nil {
 				return err
@@ -790,7 +790,7 @@ func (this *Checker) walk(node *Node) error {
 			if err != nil {
 				return err
 			}
-		} else if node.nodeType == NODE_FUNCTION {
+		} else if node.nodeType == NODE_FUNCTION || node.nodeType == NODE_CONSTRUCTOR {
 			symbol := node.left.symbol
 
 			this.functionStack.push(symbol)

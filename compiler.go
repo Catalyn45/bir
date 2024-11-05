@@ -185,6 +185,13 @@ func (this *Compiler) walkLvalue(node *Node) (error, value.Value) {
 			block := this.blocks.peek()
 
 			allocated := block.NewAlloca(symbol.valueType)
+			
+			// call init function
+
+			initFunc, ok := (*symbol.node.symbolTable)["init"]
+			if ok {
+				block.NewCall(initFunc.value, allocated)
+			}
 
 			return nil, allocated
 		}
@@ -466,7 +473,7 @@ func (this *Compiler) walkRoot(node *Node) error {
 			}
 
 			this.currentStruct = nil
-		} else if node.nodeType == NODE_FUNCTION {
+		} else if node.nodeType == NODE_FUNCTION || node.nodeType == NODE_CONSTRUCTOR{
 			this.symbolTables.push(node.left.symbolTable)
 
 			symbol := node.left.symbol
@@ -515,6 +522,10 @@ func (this *Compiler) walkRoot(node *Node) error {
 			err = this.walk(node.right)
 			if err != nil {
 				return err
+			}
+
+			if block.Term == nil {
+				block.NewRet(nil)
 			}
 
 			this.currentFunction = nil

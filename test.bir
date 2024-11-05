@@ -6,6 +6,10 @@ struct T {
 }
 
 implement T {
+	init() {
+
+	}
+
     function add(a: int, b: int): int {
         return a + b
     }
