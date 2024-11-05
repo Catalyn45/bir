@@ -66,7 +66,7 @@ func (this *Compiler) convertType(birType *SymbolType) (error, types.Type) {
 		return nil, types.Void
 	}
 
-	return nil, birType.symbol.valueType
+	return nil, types.NewPointer(birType.symbol.valueType)
 }
 
 func (this *Compiler) walkBinaryExpression(node *Node) (error, value.Value) {
@@ -186,9 +186,7 @@ func (this *Compiler) walkLvalue(node *Node) (error, value.Value) {
 
 			allocated := block.NewAlloca(symbol.valueType)
 
-			loaded := block.NewLoad(allocated.ElemType, allocated)
-
-			return nil, loaded
+			return nil, allocated
 		}
 
 		return nil, symbol.value
@@ -200,8 +198,39 @@ func (this *Compiler) walkLvalue(node *Node) (error, value.Value) {
 			return err, nil
 		}
 
-		if _, ok := value.Type().(*types.StructType); ok {
+		// member access from struct
+		if _, ok := value.Type().(*types.PointerType); ok {
+			err, symbol := this.searchSymbol(value.Type().(*types.PointerType).ElemType.Name())
+			if err != nil {
+				return err, nil
+			}
 
+			fieldSymbol, ok := (*symbol.node.symbolTable)[node.token.tokenValue]
+			if !ok {
+				return fmt.Errorf("can't find member"), nil
+			}
+
+			if fieldSymbol.simbolType.kind == TYPE_FUNCTION {
+				this.currentInstance = value
+			} else {
+				block := this.blocks.peek()
+
+				index := 0
+				for fieldNode := symbol.node.right; fieldNode != nil; fieldNode = fieldNode.next {
+					if fieldNode == fieldSymbol.node {
+						break
+					}
+
+					index++
+				}
+
+				indexValue := constant.NewInt(types.I32, int64(index))
+				zeroValue := constant.NewInt(types.I32, 0)
+
+				return nil, block.NewGetElementPtr(symbol.valueType, value, zeroValue, indexValue)
+			}
+
+			return nil, fieldSymbol.value
 		}
 		
 		return nil, value
@@ -249,8 +278,11 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 			return err, nil
 		}
 
-		if _, ok := funcValue.Type().(*types.StructType); ok {
-			return nil, funcValue
+		// constructor
+		if t, ok := funcValue.Type().(*types.PointerType); ok {
+			if _, ok := t.ElemType.(*types.StructType); ok {
+				return nil, funcValue
+			}
 		}
 
 		var arguments []value.Value
@@ -258,7 +290,6 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 		if this.currentInstance != nil {
 			arguments = append(arguments, this.currentInstance)
 			this.currentInstance = nil
-			this.symbolTables.pop()
 		}
 
 		for argument := node.right.right; argument != nil; argument = argument.next {
@@ -302,6 +333,11 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 	}
 
 	if pointerType, ok := expressionValue.Type().(*types.PointerType); ok {
+		// for structs return pointer
+		if _, ok := pointerType.ElemType.(*types.StructType); ok {
+			return nil, expressionValue;
+		}
+
 		expressionValue = block.NewLoad(pointerType.ElemType, expressionValue)
 	}
 
@@ -458,7 +494,7 @@ func (this *Compiler) walkRoot(node *Node) error {
 
 			functionPrefix := ""
 			if this.currentStruct != nil {
-				selfParameter := ir.NewParam("this", this.currentStruct)
+				selfParameter := ir.NewParam("this", types.NewPointer(this.currentStruct))
 				signature = append([]*ir.Param{selfParameter}, signature...)
 				functionPrefix = this.currentStruct.Name() + "_"
 			}

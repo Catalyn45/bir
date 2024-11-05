@@ -13,5 +13,7 @@ implement T {
 
 function main(): int {
 	var t = T()
-	return t.add(10, 20)
+    t.a = 20
+
+    return 0
 }
