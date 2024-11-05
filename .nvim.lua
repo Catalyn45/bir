@@ -8,7 +8,7 @@ require('dap-go').setup {
 			name = 'Debug package args',
 			request = 'launch',
 			program = '${fileDirname}',
-			args = {"./examples/fibonacci.bir"},
+			args = {"./test.bir"},
 		},
 	},
 }

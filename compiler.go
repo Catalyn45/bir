@@ -14,27 +14,29 @@ import (
 )
 
 type Compiler struct {
-	asts []*Node
-	irModule *ir.Module
-	symbolTables Stack[*SymbolTable]
-	currentFunction *ir.Func
-	blocks Stack[*ir.Block]
+	asts               []*Node
+	irModule           *ir.Module
+	symbolTables       Stack[*SymbolTable]
+	currentFunction    *ir.Func
+	currentStruct      types.Type
+	blocks             Stack[*ir.Block]
+	currentInstance    value.Value
 }
 
 func newCompiler(asts []*Node) *Compiler {
 	m := ir.NewModule()
-	return &Compiler {
-		asts: asts,
-		irModule: m,
-		symbolTables: Stack[*SymbolTable]{},
-		blocks: Stack[*ir.Block]{},
+	return &Compiler{
+		asts:               asts,
+		irModule:           m,
+		symbolTables:       Stack[*SymbolTable]{},
+		blocks:             Stack[*ir.Block]{},
 	}
 }
 
 func (this *Compiler) searchSymbol(symbolName string) (error, *Symbol) {
 	var foundSymbol *Symbol = nil
 
-	this.symbolTables.foreach(func (item *SymbolTable) (stop bool) {
+	this.symbolTables.foreach(func(item *SymbolTable) (stop bool) {
 		val, ok := (*item)[symbolName]
 		if !ok {
 			return false
@@ -52,7 +54,7 @@ func (this *Compiler) searchSymbol(symbolName string) (error, *Symbol) {
 	return nil, foundSymbol
 }
 
-func (this *Compiler) converType(birType string) (error, types.Type) {
+func (this *Compiler) convertType(birType string) (error, types.Type) {
 	switch birType {
 	case "int":
 		return nil, types.I64
@@ -64,7 +66,12 @@ func (this *Compiler) converType(birType string) (error, types.Type) {
 		return nil, types.Void
 	}
 
-	return fmt.Errorf("Invalid type, can't convert"), nil
+	err, symbol := this.searchSymbol(birType)
+	if err != nil {
+		return err, nil
+	}
+
+	return nil, symbol.valueType
 }
 
 func (this *Compiler) walkBinaryExpression(node *Node) (error, value.Value) {
@@ -79,25 +86,25 @@ func (this *Compiler) walkBinaryExpression(node *Node) (error, value.Value) {
 		return err, nil
 	}
 
-	if pointerType, ok := leftValue.Type().(*types.PointerType); ok {
-		leftValue = block.NewLoad(pointerType.ElemType, leftValue)
-	}
-
 	err, rightValue := this.walkExpression(node.right)
 	if err != nil {
 		return err, nil
 	}
 
-	if pointerType, ok := rightValue.Type().(*types.PointerType); ok {
-		rightValue = block.NewLoad(pointerType.ElemType, rightValue)
-	}
-
 	if node.token.tokenType == TOKEN_PLUS {
-		return nil, block.NewAdd(leftValue, rightValue)
+		if leftValue.Type() == types.Float {
+			return nil, block.NewFAdd(leftValue, rightValue)
+		} else {
+			return nil, block.NewAdd(leftValue, rightValue)
+		}
 	}
 
 	if node.token.tokenType == TOKEN_MINUS {
-		return nil, block.NewSub(leftValue, rightValue)
+		if leftValue.Type() == types.Float {
+			return nil, block.NewFSub(leftValue, rightValue)
+		} else {
+			return nil, block.NewSub(leftValue, rightValue)
+		}
 	}
 
 	if node.token.tokenType == TOKEN_DIVIDE {
@@ -109,7 +116,11 @@ func (this *Compiler) walkBinaryExpression(node *Node) (error, value.Value) {
 	}
 
 	if node.token.tokenType == TOKEN_MULTIPLY {
-		return nil, block.NewMul(leftValue, rightValue)
+		if leftValue.Type() == types.Float {
+			return nil, block.NewFMul(leftValue, rightValue)
+		} else {
+			return nil, block.NewMul(leftValue, rightValue)
+		}
 	}
 
 	if node.token.tokenType == TOKEN_AND {
@@ -171,6 +182,58 @@ func (this *Compiler) walkBinaryExpression(node *Node) (error, value.Value) {
 	return fmt.Errorf("invalid operation"), nil
 }
 
+func (this *Compiler) walkLvalue(node *Node) (error, value.Value) {
+	if node.nodeType == NODE_VARIABLE {
+		err, symbol := this.searchSymbol(node.token.tokenValue)
+		if err != nil {
+			return err, nil
+		}
+
+		if symbol.value == nil {
+			block := this.blocks.peek()
+
+			allocated := block.NewAlloca(symbol.valueType)
+
+			loaded := block.NewLoad(allocated.ElemType, allocated)
+
+			return nil, loaded
+		}
+
+		return nil, symbol.value
+	}
+
+	if node.nodeType == NODE_MEMBER_ACCESS {
+		err, value := this.walkExpression(node.left)
+		if err != nil {
+			return err, nil
+		}
+
+		if _, ok := value.Type().(*types.StructType); ok {
+			err, symbol := this.searchSymbol(value.Type().Name())
+			if err != nil {
+				return err, nil
+			}
+
+			this.symbolTables.push(symbol.node.symbolTable)
+
+			err, symbol = this.searchSymbol(node.token.tokenValue)
+			if err != nil {
+				return err, nil
+			}
+
+			if symbol.node.nodeType == NODE_FUNCTION_DECLARATION {
+				this.currentInstance = value
+			}
+
+			return nil, symbol.value
+		}
+		
+		return nil, value
+	}
+
+	return fmt.Errorf("can't eval lvalue expression"), nil
+}
+
 func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 	block := this.blocks.peek()
 
@@ -200,34 +263,32 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 		}
 	}
 
-	if node.nodeType == NODE_VARIABLE {
-		err, symbol := this.searchSymbol(node.token.tokenValue)
-		if err != nil {
-			return err, nil
-		}
-
-		return nil, symbol.value
-	}
-
 	if node.nodeType == NODE_BINARY_EXPRESSION {
 		return this.walkBinaryExpression(node)
 	}
 
 	if node.nodeType == NODE_CALL {
-		err, funcValue := this.walkExpression(node.left)
+		err, funcValue := this.walkLvalue(node.left)
 		if err != nil {
 			return err, nil
 		}
 
+		if _, ok := funcValue.Type().(*types.StructType); ok {
+			return nil, funcValue
+		}
+
 		var arguments []value.Value
+
+		if this.currentInstance != nil {
+			arguments = append(arguments, this.currentInstance)
+			this.currentInstance = nil
+			this.symbolTables.pop()
+		}
+
 		for argument := node.right.right; argument != nil; argument = argument.next {
 			err, argumentValue := this.walkExpression(argument)
 			if err != nil {
 				return err, nil
-			}
-
-			if pointerType, ok := argumentValue.Type().(*types.PointerType); ok {
-				argumentValue = block.NewLoad(pointerType.ElemType, argumentValue)
 			}
 
 			arguments = append(arguments, argumentValue)
@@ -237,7 +298,7 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 	}
 
 	if node.nodeType == NODE_VARIABLE_DECLARATION {
-		err, irType := this.converType(node.symbol.simbolType.name)
+		err, irType := this.convertType(node.symbol.simbolType.name)
 		if err != nil {
 			return err, nil
 		}
@@ -259,7 +320,16 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 		return nil, block.NewLoad(allocationValue.ElemType, allocationValue)
 	}
 
-	return fmt.Errorf("can't eval expression"), nil
+	err, expressionValue := this.walkLvalue(node)
+	if err != nil {
+		return err, nil
+	}
+
+	if pointerType, ok := expressionValue.Type().(*types.PointerType); ok {
+		expressionValue = block.NewLoad(pointerType.ElemType, expressionValue)
+	}
+
+	return nil, expressionValue
 }
 
 func (this *Compiler) walk(node *Node) error {
@@ -272,15 +342,9 @@ func (this *Compiler) walk(node *Node) error {
 
 			block := this.blocks.pop()
 
-			// deref pointer in case of pointer type
-			// TODO don't do that if struct
-			if pointerType, ok := returnValue.Type().(*types.PointerType); ok {
-				returnValue = block.NewLoad(pointerType.ElemType, returnValue)
-			}
-
 			block.NewRet(returnValue)
 		} else if node.nodeType == NODE_ASSIGNMENT {
-			err, assignmentSource := this.walkExpression(node.left)
+			err, assignmentSource := this.walkLvalue(node.left)
 			if err != nil {
 				return err
 			}
@@ -358,20 +422,55 @@ func (this *Compiler) walk(node *Node) error {
 
 func (this *Compiler) walkRoot(node *Node) error {
 	for node != nil {
-		if node.nodeType == NODE_FUNCTION {
+		if node.nodeType == NODE_STRUCT {
+			this.symbolTables.push(node.symbolTable)
+
+			var fieldTypes []types.Type
+			for field := node.right; field != nil; field = field.next {
+				err, convertedType := this.convertType(field.symbol.simbolType.name)
+				if err != nil {
+					return err
+				}
+
+				fieldTypes = append(fieldTypes, convertedType)
+			}
+
+			structType := this.irModule.NewTypeDef(node.token.tokenValue, types.NewStruct(fieldTypes...))
+
+			node.symbol.valueType = structType
+
+			this.symbolTables.pop()
+		} else if node.nodeType == NODE_IMPLEMENT {
+			strcutName := node.token.tokenValue
+
+			err, found := this.searchSymbol(strcutName)
+			if err != nil {
+				return err
+			}
+
+			this.currentStruct = found.valueType
+
+			err = this.walkRoot(node.right)
+			if err != nil {
+				return err
+			}
+
+			this.currentStruct = nil
+		} else if node.nodeType == NODE_FUNCTION {
 			this.symbolTables.push(node.left.symbolTable)
 
 			symbol := node.left.symbol
 			birSignature := symbol.simbolType.signature
 
-			err, returnType := this.converType(birSignature.returnType)
+			err, returnType := this.convertType(birSignature.returnType)
 			if err != nil {
 				return err
 			}
 
 			var signature []*ir.Param
+
 			for _, birparam := range birSignature.parameters {
-				err, paramType := this.converType(birparam.paramType)
+				err, paramType := this.convertType(birparam.paramType)
 				if err != nil {
 					return err
 				}
@@ -383,10 +482,17 @@ func (this *Compiler) walkRoot(node *Node) error {
 				signature = append(signature, parameter)
 			}
 
+			functionPrefix := ""
+			if this.currentStruct != nil {
+				selfParameter := ir.NewParam("this", this.currentStruct)
+				signature = append([]*ir.Param{selfParameter}, signature...)
+				functionPrefix = this.currentStruct.Name() + "_"
+			}
+
 			function := this.irModule.NewFunc(
-				symbol.name,
+				functionPrefix + symbol.name,
 				returnType,
-				signature...
+				signature...,
 			)
 
 			node.left.symbol.value = function

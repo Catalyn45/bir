@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+
+	"github.com/llir/llvm/ir/types"
 	"github.com/llir/llvm/ir/value"
 )
 
@@ -38,6 +40,7 @@ type Symbol struct {
 	simbolType SymbolType
 	node 	   *Node
 	value      value.Value
+	valueType  types.Type
 }
 
 type SymbolTable map[string]*Symbol
