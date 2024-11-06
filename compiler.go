@@ -473,7 +473,7 @@ func (this *Compiler) walkRoot(node *Node) error {
 			}
 
 			this.currentStruct = nil
-		} else if node.nodeType == NODE_FUNCTION || node.nodeType == NODE_CONSTRUCTOR{
+		} else if node.nodeType == NODE_FUNCTION || node.nodeType == NODE_CONSTRUCTOR {
 			this.symbolTables.push(node.left.symbolTable)
 
 			symbol := node.left.symbol
@@ -501,8 +501,6 @@ func (this *Compiler) walkRoot(node *Node) error {
 
 			functionPrefix := ""
 			if this.currentStruct != nil {
-				selfParameter := ir.NewParam("this", types.NewPointer(this.currentStruct))
-				signature = append([]*ir.Param{selfParameter}, signature...)
 				functionPrefix = this.currentStruct.Name() + "_"
 			}
 

@@ -7,17 +7,16 @@ struct T {
 
 implement T {
 	init() {
-
+        this.a = 10
 	}
 
-    function add(a: int, b: int): int {
-        return a + b
+    function get_a(): int {
+        return this.a
     }
 }
 
 function main(): int {
 	var t = T()
-    t.a = 20
 
-    return 0
+    return t.get_a()
 }

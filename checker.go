@@ -51,6 +51,7 @@ type Checker struct {
 	symbolTables  *Stack[*SymbolTable]
 	functionStack *Stack[*Symbol]
 	imports []string
+	currentStruct *SymbolType
 }
 
 func newChecker(asts []*Node) *Checker {
@@ -402,11 +403,16 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 			argumentTypes = append(argumentTypes, argumentType)
 		}
 
-		if len(parameterTypes.parameters) != len(argumentTypes) {
-			return fmt.Errorf("Not the same number of arguments"), nil
+		toSubstract := 0
+		if len(parameterTypes.parameters) > 0 && parameterTypes.parameters[0].name == "this" {
+			toSubstract = 1
 		}
 
-		for i := 0; i < len(parameterTypes.parameters); i++ {
+		if (len(parameterTypes.parameters) - toSubstract) != len(argumentTypes) {
+			return fmt.Errorf("Not the same number of arguments: %d, %d", len(parameterTypes.parameters), len(argumentTypes)), nil
+		}
+
+		for i := toSubstract; i < len(parameterTypes.parameters); i++ {
 			if !this.isAssignable(parameterTypes.parameters[i].paramType, argumentTypes[i]) {
 				return fmt.Errorf("Invalid argument type for parameter"), nil
 			}
@@ -561,6 +567,16 @@ func (this *Checker) addFunctionDeclaration(node *Node) (error, *Symbol) {
 	}
 
 	var signature []*Parameter
+
+	if this.currentStruct != nil {
+		// add this
+		signature = append(signature, &Parameter{
+			name: "this",
+			paramType: this.currentStruct,
+			node: &Node{},
+		})
+	}
+
 	for parameter := node.right; parameter != nil; parameter = parameter.next {
 		err, parameterType := this.getTypeFromNode(parameter.left)
 		if err != nil {
@@ -743,10 +759,14 @@ func (this *Checker) walkRootDeclarations (node *Node) error {
 			// push the struct symbol table
 			this.symbolTables.push(symbol.node.symbolTable)
 
+			this.currentStruct = &symbol.simbolType
+
 			err = this.walkRootDeclarations(node.right)
 			if err != nil {
 				return err
 			}
+
+			this.currentStruct = nil
 
 			this.symbolTables.pop()
 		} else if node.nodeType == NODE_INTERFACE {
@@ -786,15 +806,34 @@ func (this *Checker) walkRootDeclarations (node *Node) error {
 func (this *Checker) walk(node *Node) error {
 	for node != nil {
 		if node.nodeType == NODE_IMPLEMENT {
-			err := this.walk(node.right)
+			err, symbol := this.searchSymbol(node.token.tokenValue)
 			if err != nil {
 				return err
 			}
+
+			this.currentStruct = &symbol.simbolType
+
+			err = this.walk(node.right)
+			if err != nil {
+				return err
+			}
+
+			this.currentStruct = nil
 		} else if node.nodeType == NODE_FUNCTION || node.nodeType == NODE_CONSTRUCTOR {
 			symbol := node.left.symbol
 
 			this.functionStack.push(symbol)
 			this.enterScope(node.left)
+
+			// declare this
+			if this.currentStruct != nil {
+				currentFunction := this.functionStack.peek()
+
+				err := this.addVariableSymbol("this", this.currentStruct, currentFunction.simbolType.signature.parameters[0].node)
+				if err != nil {
+					return err
+				}
+			}
 
 			err := this.walkStatements(node.left.right)
 			if err != nil {
