@@ -21,6 +21,7 @@ type Compiler struct {
 	currentStruct      types.Type
 	blocks             Stack[*ir.Block]
 	currentInstance    value.Value
+	constructor 	   bool
 }
 
 func newCompiler(asts []*Node) *Compiler {
@@ -186,14 +187,16 @@ func (this *Compiler) walkLvalue(node *Node) (error, value.Value) {
 
 			allocated := block.NewAlloca(symbol.valueType)
 			
-			// call init function
+			this.currentInstance = allocated
+			this.constructor = true
 
+			// call init function
 			initFunc, ok := (*symbol.node.symbolTable)["init"]
 			if ok {
-				block.NewCall(initFunc.value, allocated)
+				return nil, initFunc.value
 			}
 
-			return nil, allocated
+			return nil, nil
 		}
 
 		return nil, symbol.value
@@ -285,18 +288,20 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 			return err, nil
 		}
 
-		// constructor
-		if t, ok := funcValue.Type().(*types.PointerType); ok {
-			if _, ok := t.ElemType.(*types.StructType); ok {
-				return nil, funcValue
-			}
+		currentInstance := this.currentInstance
+		this.currentInstance = nil
+		
+		isConstructor := this.constructor
+		this.constructor = false
+
+		if isConstructor && funcValue == nil {
+			return nil, currentInstance
 		}
 
 		var arguments []value.Value
 
-		if this.currentInstance != nil {
-			arguments = append(arguments, this.currentInstance)
-			this.currentInstance = nil
+		if currentInstance != nil {
+			arguments = append(arguments, currentInstance)
 		}
 
 		for argument := node.right.right; argument != nil; argument = argument.next {
@@ -308,7 +313,13 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 			arguments = append(arguments, argumentValue)
 		}
 
-		return nil, block.NewCall(funcValue, arguments...)
+		call := block.NewCall(funcValue, arguments...)
+
+		if isConstructor {
+			return nil, currentInstance
+		}
+
+		return nil, call
 	}
 
 	if node.nodeType == NODE_VARIABLE_DECLARATION {
@@ -485,6 +496,17 @@ func (this *Compiler) walkRoot(node *Node) error {
 			}
 
 			var signature []*ir.Param
+
+			if birSignature.self != nil {
+				err, paramType := this.convertType(birSignature.self)
+				if err != nil {
+					return err
+				}
+
+				parameter := ir.NewParam("this", paramType)
+				signature = append(signature, parameter)
+				(*node.left.symbolTable)["this"].value = parameter
+			}
 
 			for _, birparam := range birSignature.parameters {
 				err, paramType := this.convertType(birparam.paramType)

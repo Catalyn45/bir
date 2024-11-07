@@ -27,6 +27,7 @@ type Parameter struct {
 type Signature struct {
 	parameters[] *Parameter
 	returnType *SymbolType
+	self *SymbolType
 }
 
 type SymbolType struct {
@@ -93,12 +94,14 @@ func (this *Checker) addVariableSymbol(varName string, varType *SymbolType, node
 		node: node,
 	}
 
-	node.symbol = lastScope[varName]
+	if node != nil {
+		node.symbol = lastScope[varName]
+	}
 
 	return nil
 }
 
-func (this *Checker) addFunctionSymbol(functionName string, returnType *SymbolType, parametersTypes []*Parameter, node *Node) (error, *Symbol) {
+func (this *Checker) addFunctionSymbol(functionName string, returnType *SymbolType, parametersTypes []*Parameter, node *Node, self *SymbolType) (error, *Symbol) {
 	if this.symbolAlreadyExists(functionName) {
 		return fmt.Errorf("function already declared in current scope"), nil
 	}
@@ -113,6 +116,7 @@ func (this *Checker) addFunctionSymbol(functionName string, returnType *SymbolTy
 			signature: &Signature {
 				parameters: parametersTypes,
 				returnType: returnType,
+				self: self,
 			},
 		},
 		node: node,
@@ -403,16 +407,11 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 			argumentTypes = append(argumentTypes, argumentType)
 		}
 
-		toSubstract := 0
-		if len(parameterTypes.parameters) > 0 && parameterTypes.parameters[0].name == "this" {
-			toSubstract = 1
-		}
-
-		if (len(parameterTypes.parameters) - toSubstract) != len(argumentTypes) {
+		if len(parameterTypes.parameters) != len(argumentTypes) {
 			return fmt.Errorf("Not the same number of arguments: %d, %d", len(parameterTypes.parameters), len(argumentTypes)), nil
 		}
 
-		for i := toSubstract; i < len(parameterTypes.parameters); i++ {
+		for i := 0; i < len(parameterTypes.parameters); i++ {
 			if !this.isAssignable(parameterTypes.parameters[i].paramType, argumentTypes[i]) {
 				return fmt.Errorf("Invalid argument type for parameter"), nil
 			}
@@ -567,16 +566,6 @@ func (this *Checker) addFunctionDeclaration(node *Node) (error, *Symbol) {
 	}
 
 	var signature []*Parameter
-
-	if this.currentStruct != nil {
-		// add this
-		signature = append(signature, &Parameter{
-			name: "this",
-			paramType: this.currentStruct,
-			node: &Node{},
-		})
-	}
-
 	for parameter := node.right; parameter != nil; parameter = parameter.next {
 		err, parameterType := this.getTypeFromNode(parameter.left)
 		if err != nil {
@@ -591,7 +580,7 @@ func (this *Checker) addFunctionDeclaration(node *Node) (error, *Symbol) {
 		)
 	}
 
-	return this.addFunctionSymbol(symbolName, symbolType, signature, node)
+	return this.addFunctionSymbol(symbolName, symbolType, signature, node, this.currentStruct)
 }
 
 func (this *Checker) walkStatements(node *Node) error {
@@ -806,19 +795,10 @@ func (this *Checker) walkRootDeclarations (node *Node) error {
 func (this *Checker) walk(node *Node) error {
 	for node != nil {
 		if node.nodeType == NODE_IMPLEMENT {
-			err, symbol := this.searchSymbol(node.token.tokenValue)
+			err := this.walk(node.right)
 			if err != nil {
 				return err
 			}
-
-			this.currentStruct = &symbol.simbolType
-
-			err = this.walk(node.right)
-			if err != nil {
-				return err
-			}
-
-			this.currentStruct = nil
 		} else if node.nodeType == NODE_FUNCTION || node.nodeType == NODE_CONSTRUCTOR {
 			symbol := node.left.symbol
 
@@ -826,10 +806,11 @@ func (this *Checker) walk(node *Node) error {
 			this.enterScope(node.left)
 
 			// declare this
-			if this.currentStruct != nil {
-				currentFunction := this.functionStack.peek()
+			currentFunction := this.functionStack.peek()
 
-				err := this.addVariableSymbol("this", this.currentStruct, currentFunction.simbolType.signature.parameters[0].node)
+			self := currentFunction.simbolType.signature.self
+			if self != nil {
+				err := this.addVariableSymbol("this", self, nil)
 				if err != nil {
 					return err
 				}

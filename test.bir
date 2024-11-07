@@ -6,8 +6,8 @@ struct T {
 }
 
 implement T {
-	init() {
-        this.a = 10
+	init(a: int) {
+        this.a = a
 	}
 
     function get_a(): int {
@@ -16,7 +16,7 @@ implement T {
 }
 
 function main(): int {
-	var t = T()
+	var t = T(15)
 
     return t.get_a()
 }
