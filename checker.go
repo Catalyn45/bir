@@ -682,6 +682,7 @@ func (this *Checker) addSymbolHeader (value string, typeType int, node *Node) er
 		name: value,
 		simbolType: SymbolType {
 			kind: typeType,
+			name: value,
 		},
 		node: node,
 	}
@@ -809,6 +810,16 @@ func (this *Checker) walk(node *Node) error {
 			currentFunction := this.functionStack.peek()
 
 			self := currentFunction.simbolType.signature.self
+
+			if self != nil {
+				err, updatedSelf := this.searchSymbol(self.name)
+				if err != nil {
+					return err
+				}
+
+				self.symbol = updatedSelf
+			}
+
 			if self != nil {
 				err := this.addVariableSymbol("this", self, nil)
 				if err != nil {

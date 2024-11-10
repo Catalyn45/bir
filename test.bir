@@ -1,10 +1,5 @@
 module main
 
-struct T {
-    a: int
-    b: float
-}
-
 implement T {
 	init(a: int) {
         this.a = a
@@ -20,3 +15,9 @@ function main(): int {
 
     return t.get_a()
 }
+
+struct T {
+    a: int
+    b: float
+}
+
