@@ -42,7 +42,7 @@ type Symbol struct {
 	simbolType SymbolType
 	node 	   *Node
 	value      value.Value
-	valueType  types.Type
+	structType  *types.StructType
 }
 
 type SymbolTable map[string]*Symbol
@@ -126,42 +126,6 @@ func (this *Checker) addFunctionSymbol(functionName string, returnType *SymbolTy
 	lastScope[functionName].simbolType.symbol = node.symbol
 
 	return nil, lastScope[functionName]
-}
-
-func (this *Checker) addStructSymbol(structName string, node *Node) error {
-	lastScope := *this.symbolTables.peek()
-
-	lastScope[structName] = &Symbol {
-		name: structName,
-		simbolType: SymbolType {
-			kind: TYPE_STRUCT,
-			name: structName,
-		},
-		node: node,
-	}
-
-	node.symbol = lastScope[structName]
-	lastScope[structName].simbolType.symbol = node.symbol
-
-	return nil
-}
-
-func (this *Checker) addInterfaceSymbol(interfaceName string, node *Node) error {
-	lastScope := *this.symbolTables.peek()
-
-	lastScope[interfaceName] = &Symbol {
-		name: interfaceName,
-		simbolType: SymbolType {
-			kind: TYPE_INTERFACE,
-			name: interfaceName,
-		},
-		node: node,
-	}
-
-	node.symbol = lastScope[interfaceName]
-	lastScope[interfaceName].simbolType.symbol = node.symbol
-
-	return nil
 }
 
 func (this *Checker) searchSymbolInModule(module string, symbolName string) (error, *Symbol) {
@@ -671,7 +635,7 @@ func (this *Checker) walkGetLastStatement(node *Node) (error, *Node) {
 	return nil, lastNode
 }
 
-func (this *Checker) addSymbolHeader (value string, typeType int, node *Node) error {
+func (this *Checker) addTypeHeader(value string, typeType int, node *Node) error {
 	if this.symbolAlreadyExists(value) {
 		return fmt.Errorf("struct already declared in current scope")
 	}
@@ -688,14 +652,15 @@ func (this *Checker) addSymbolHeader (value string, typeType int, node *Node) er
 	}
 
 	node.symbol = lastScope[value]
+	lastScope[value].simbolType.symbol = lastScope[value]
 
 	return nil
 }
 
-func (this *Checker) walkRootTypes (node *Node) error {
+func (this *Checker) walkRootTypes(node *Node) error {
 	for node != nil {
 		if node.nodeType == NODE_STRUCT {
-			err := this.addSymbolHeader(node.token.tokenValue, TYPE_STRUCT, node)
+			err := this.addTypeHeader(node.token.tokenValue, TYPE_STRUCT, node)
 			if err != nil {
 				return err
 			}
@@ -704,7 +669,7 @@ func (this *Checker) walkRootTypes (node *Node) error {
 			this.enterScope(node)
 			this.leaveScope()
 		} else if node.nodeType == NODE_INTERFACE {
-			err := this.addSymbolHeader(node.token.tokenValue, TYPE_INTERFACE, node)
+			err := this.addTypeHeader(node.token.tokenValue, TYPE_INTERFACE, node)
 			if err != nil {
 				return err
 			}
@@ -716,10 +681,10 @@ func (this *Checker) walkRootTypes (node *Node) error {
 	return nil
 }
 
-func (this *Checker) walkRootDeclarations (node *Node) error {
+func (this *Checker) walkRootDeclarations(node *Node) error {
 	for node != nil {
 		if node.nodeType == NODE_STRUCT {
-			structName := node.token.tokenValue
+			// structName := node.token.tokenValue
 
 			this.symbolTables.push(node.symbolTable)
 			
@@ -730,10 +695,10 @@ func (this *Checker) walkRootDeclarations (node *Node) error {
 
 			this.symbolTables.pop()
 
-			err = this.addStructSymbol(structName, node)
-			if err != nil {
-				return err
-			}
+			// err = this.addStructSymbol(structName, node)
+			// if err != nil {
+			// 	return err
+			// }
 		} else if node.nodeType == NODE_IMPLEMENT {
 			structName := node.token.tokenValue
 
@@ -760,7 +725,7 @@ func (this *Checker) walkRootDeclarations (node *Node) error {
 
 			this.symbolTables.pop()
 		} else if node.nodeType == NODE_INTERFACE {
-			interfaceName := node.token.tokenValue
+			// interfaceName := node.token.tokenValue
 
 			this.enterScope(node)
 
@@ -771,10 +736,10 @@ func (this *Checker) walkRootDeclarations (node *Node) error {
 
 			this.leaveScope()
 
-			err = this.addInterfaceSymbol(interfaceName, node)
-			if err != nil {
-				return err
-			}
+			// err = this.addInterfaceSymbol(interfaceName, node)
+			// if err != nil {
+			// 	return err
+			// }
 		} else if node.nodeType == NODE_FUNCTION || node.nodeType == NODE_CONSTRUCTOR {
 			err, _ := this.addFunctionDeclaration(node.left)
 			if err != nil {
@@ -810,16 +775,6 @@ func (this *Checker) walk(node *Node) error {
 			currentFunction := this.functionStack.peek()
 
 			self := currentFunction.simbolType.signature.self
-
-			if self != nil {
-				err, updatedSelf := this.searchSymbol(self.name)
-				if err != nil {
-					return err
-				}
-
-				self.symbol = updatedSelf
-			}
-
 			if self != nil {
 				err := this.addVariableSymbol("this", self, nil)
 				if err != nil {

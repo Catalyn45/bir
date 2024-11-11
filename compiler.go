@@ -67,7 +67,7 @@ func (this *Compiler) convertType(birType *SymbolType) (error, types.Type) {
 		return nil, types.Void
 	}
 
-	return nil, types.NewPointer(birType.symbol.valueType)
+	return nil, types.NewPointer(birType.symbol.structType)
 }
 
 func (this *Compiler) walkBinaryExpression(node *Node) (error, value.Value) {
@@ -185,7 +185,7 @@ func (this *Compiler) walkLvalue(node *Node) (error, value.Value) {
 		if symbol.value == nil {
 			block := this.blocks.peek()
 
-			allocated := block.NewAlloca(symbol.valueType)
+			allocated := block.NewAlloca(symbol.structType)
 			
 			this.currentInstance = allocated
 			this.constructor = true
@@ -237,7 +237,7 @@ func (this *Compiler) walkLvalue(node *Node) (error, value.Value) {
 				indexValue := constant.NewInt(types.I32, int64(index))
 				zeroValue := constant.NewInt(types.I32, 0)
 
-				return nil, block.NewGetElementPtr(symbol.valueType, value, zeroValue, indexValue)
+				return nil, block.NewGetElementPtr(symbol.structType, value, zeroValue, indexValue)
 			}
 
 			return nil, fieldSymbol.value
@@ -452,41 +452,55 @@ func (this *Compiler) walk(node *Node) error {
 
 func (this *Compiler) walkRoot(node *Node) error {
 	for node != nil {
-		if node.nodeType == NODE_STRUCT {
-			this.symbolTables.push(node.symbolTable)
+		if node.nodeType == NODE_IMPLEMENT {
+			err := this.walkRoot(node.right)
+			if err != nil {
+				return err
+			}
+		} else if node.nodeType == NODE_FUNCTION || node.nodeType == NODE_CONSTRUCTOR {
+			this.symbolTables.push(node.left.symbolTable)
 
-			var fieldTypes []types.Type
+			function := node.left.symbol.value.(*ir.Func)
+
+			this.currentFunction = function
+
+			block := function.NewBlock("")
+
+			this.blocks.push(block)
+			err := this.walk(node.right)
+			if err != nil {
+				return err
+			}
+
+			if block.Term == nil {
+				block.NewRet(nil)
+			}
+
+			this.currentFunction = nil
+
+			this.symbolTables.pop()
+		}
+
+		node = node.next
+	}
+
+	return nil
+}
+
+func (this *Compiler) walkRootDeclarations(node *Node) error {
+	for node != nil {
+		if node.nodeType == NODE_STRUCT {
+			structBody := node.symbol.structType
+
 			for field := node.right; field != nil; field = field.next {
 				err, convertedType := this.convertType(&field.symbol.simbolType)
 				if err != nil {
 					return err
 				}
 
-				fieldTypes = append(fieldTypes, convertedType)
+				structBody.Fields = append(structBody.Fields, convertedType)
 			}
-
-			structType := this.irModule.NewTypeDef(node.token.tokenValue, types.NewStruct(fieldTypes...))
-
-			node.symbol.valueType = structType
-
-			this.symbolTables.pop()
-		} else if node.nodeType == NODE_IMPLEMENT {
-			err, found := this.searchSymbol(node.token.tokenValue)
-			if err != nil {
-				return err
-			}
-
-			this.currentStruct = found.valueType
-
-			err = this.walkRoot(node.right)
-			if err != nil {
-				return err
-			}
-
-			this.currentStruct = nil
 		} else if node.nodeType == NODE_FUNCTION || node.nodeType == NODE_CONSTRUCTOR {
-			this.symbolTables.push(node.left.symbolTable)
-
 			symbol := node.left.symbol
 			birSignature := symbol.simbolType.signature
 
@@ -496,7 +510,6 @@ func (this *Compiler) walkRoot(node *Node) error {
 			}
 
 			var signature []*ir.Param
-
 			if birSignature.self != nil {
 				err, paramType := this.convertType(birSignature.self)
 				if err != nil {
@@ -533,24 +546,35 @@ func (this *Compiler) walkRoot(node *Node) error {
 			)
 
 			node.left.symbol.value = function
-
-			this.currentFunction = function
-
-			block := function.NewBlock("")
-
-			this.blocks.push(block)
-			err = this.walk(node.right)
+		} else if node.nodeType == NODE_IMPLEMENT {
+			err, found := this.searchSymbol(node.token.tokenValue)
 			if err != nil {
 				return err
 			}
 
-			if block.Term == nil {
-				block.NewRet(nil)
+			this.currentStruct = found.structType
+
+			err = this.walkRootDeclarations(node.right)
+			if err != nil {
+				return err
 			}
 
-			this.currentFunction = nil
+			this.currentStruct = nil
+		}
 
-			this.symbolTables.pop()
+		node = node.next
+	}
+
+	return nil
+}
+
+func (this *Compiler) walkRootTypes(node *Node) error {
+	for node != nil {
+		if node.nodeType == NODE_STRUCT {
+			structBody := types.NewStruct()
+			this.irModule.NewTypeDef(node.token.tokenValue, structBody)
+
+			node.symbol.structType = structBody
 		}
 
 		node = node.next
@@ -563,7 +587,17 @@ func (this *Compiler) Compile() error {
 	for _, ast := range this.asts {
 		this.symbolTables.push(ast.symbolTable)
 
-		err := this.walkRoot(ast.right)
+		err := this.walkRootTypes(ast.right)
+		if err != nil {
+			return err
+		}
+
+		err = this.walkRootDeclarations(ast.right)
+		if err != nil {
+			return err
+		}
+
+		err = this.walkRoot(ast.right)
 		if err != nil {
 			return err
 		}

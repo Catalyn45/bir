@@ -19,5 +19,6 @@ function main(): int {
 struct T {
     a: int
     b: float
+    next: T
 }
 
