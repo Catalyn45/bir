@@ -1,10 +1,6 @@
 module main
 
 implement T {
-	init(a: int) {
-        this.a = a
-	}
-
     function get_a(): int {
         return this.a
     }
@@ -12,8 +8,19 @@ implement T {
 
 function main(): int {
 	var t = T(15)
+    var n = T(25)
+
+    t.next = n
+
+    t = t.next
 
     return t.get_a()
+}
+
+implement T {
+	init(a: int) {
+        this.a = a
+	}
 }
 
 struct T {

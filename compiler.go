@@ -330,6 +330,7 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 
 		block := this.blocks.peek()
 		allocationValue := block.NewAlloca(irType)
+		allocationValue.SetName(node.symbol.name)
 
 		node.symbol.value = allocationValue
 
