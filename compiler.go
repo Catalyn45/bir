@@ -184,7 +184,12 @@ func (this *Compiler) walkLvalue(node *Node) (error, value.Value) {
 	if node.nodeType == NODE_VARIABLE {
 		symbol := node.symbol
 
-		if symbol.value == nil {
+		// variable is in other module
+		if node.symbol != nil && node.symbol.simbolType.kind == TYPE_MODULE {
+			return nil, nil
+		}
+
+		if symbol.structType != nil {
 			block := this.blocks.peek()
 
 			allocated := block.NewAlloca(symbol.structType)
@@ -208,6 +213,21 @@ func (this *Compiler) walkLvalue(node *Node) (error, value.Value) {
 		err, value := this.walkExpression(node.left)
 		if err != nil {
 			return err, nil
+		}
+
+		if value == nil {
+			err, function := this.createFunction(node)
+			if err != nil {
+				return err, nil
+			}
+
+			node.symbol.value = function
+
+			return nil, node.symbol.value
+		}
+
+		if node.symbol != nil && node.symbol.simbolType.kind == TYPE_MODULE {
+			return nil, value
 		}
 
 		// member access from struct
@@ -490,6 +510,58 @@ func (this *Compiler) walkRoot(node *Node) error {
 	return nil
 }
 
+func (this *Compiler) createFunction(node *Node) (error, value.Value) {
+	symbol := node.symbol
+	birSignature := symbol.simbolType.signature
+
+	err, returnType := this.convertType(birSignature.returnType)
+	if err != nil {
+		return err, nil
+	}
+
+	var signature []*ir.Param
+	if birSignature.self != nil {
+		err, paramType := this.convertType(birSignature.self)
+		if err != nil {
+			return err, nil
+		}
+
+		parameter := ir.NewParam("this", paramType)
+		signature = append(signature, parameter)
+		(*node.symbolTable)["this"].value = parameter
+	}
+
+	for _, birparam := range birSignature.parameters {
+		err, paramType := this.convertType(birparam.paramType)
+		if err != nil {
+			return err, nil
+		}
+
+		parameter := ir.NewParam(birparam.name, paramType)
+
+		birparam.node.symbol.value = parameter
+
+		signature = append(signature, parameter)
+	}
+
+	functionPrefix := ""
+	if symbol.name != "main" {
+		functionPrefix = *this.moduleName + "_"
+	}
+
+	if this.currentStruct != nil {
+		functionPrefix = functionPrefix + this.currentStruct.Name() + "_"
+	}
+
+	function := this.irModule.NewFunc(
+		functionPrefix + symbol.name,
+		returnType,
+		signature...,
+	)
+
+	return nil, function
+}
+
 func (this *Compiler) walkRootDeclarations(node *Node) error {
 	for node != nil {
 		if node.nodeType == NODE_STRUCT {
@@ -504,53 +576,10 @@ func (this *Compiler) walkRootDeclarations(node *Node) error {
 				structBody.Fields = append(structBody.Fields, convertedType)
 			}
 		} else if node.nodeType == NODE_FUNCTION || node.nodeType == NODE_CONSTRUCTOR {
-			symbol := node.left.symbol
-			birSignature := symbol.simbolType.signature
-
-			err, returnType := this.convertType(birSignature.returnType)
+			err, function := this.createFunction(node.left)
 			if err != nil {
 				return err
 			}
-
-			var signature []*ir.Param
-			if birSignature.self != nil {
-				err, paramType := this.convertType(birSignature.self)
-				if err != nil {
-					return err
-				}
-
-				parameter := ir.NewParam("this", paramType)
-				signature = append(signature, parameter)
-				(*node.left.symbolTable)["this"].value = parameter
-			}
-
-			for _, birparam := range birSignature.parameters {
-				err, paramType := this.convertType(birparam.paramType)
-				if err != nil {
-					return err
-				}
-
-				parameter := ir.NewParam(birparam.name, paramType)
-
-				birparam.node.symbol.value = parameter
-
-				signature = append(signature, parameter)
-			}
-
-			functionPrefix := ""
-			if symbol.name != "main" {
-				functionPrefix = *this.moduleName + "_"
-			}
-
-			if this.currentStruct != nil {
-				functionPrefix = functionPrefix + this.currentStruct.Name() + "_"
-			}
-
-			function := this.irModule.NewFunc(
-				functionPrefix + symbol.name,
-				returnType,
-				signature...,
-			)
 
 			node.left.symbol.value = function
 		} else if node.nodeType == NODE_IMPLEMENT {

@@ -1,5 +1,5 @@
-module map
+module test
 
-function test() {
-
+function bla(): int {
+    return 33
 }
