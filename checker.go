@@ -38,6 +38,7 @@ type SymbolType struct {
 }
 
 type Symbol struct {
+	module     *string
 	name       string
 	simbolType SymbolType
 	node 	   *Node
@@ -53,6 +54,7 @@ type Checker struct {
 	functionStack *Stack[*Symbol]
 	imports []string
 	currentStruct *SymbolType
+	currentModuleName *string
 }
 
 func newChecker(asts []*Node) *Checker {
@@ -92,6 +94,7 @@ func (this *Checker) addVariableSymbol(varName string, varType *SymbolType, node
 		name: varName,
 		simbolType: *varType,
 		node: node,
+		module: this.currentModuleName,
 	}
 
 	if node != nil {
@@ -120,6 +123,7 @@ func (this *Checker) addFunctionSymbol(functionName string, returnType *SymbolTy
 			},
 		},
 		node: node,
+		module: this.currentModuleName,
 	}
 
 	node.symbol = lastScope[functionName]
@@ -140,14 +144,18 @@ func (this *Checker) searchSymbolInModule(module string, symbolName string) (err
 }
 
 func (this *Checker) searchSymbol(symbolName string) (error, *Symbol) {
-	// for _, imp := range this.imports {
-	// 	if imp == symbolName {
-	// 		return nil, &SymbolType {
-	// 			kind: TYPE_MODULE,
-	// 			name: imp,
-	// 		}
-	// 	}
-	// }
+	for _, imp := range this.imports {
+		if imp == symbolName {
+			return nil, &Symbol {
+				module: &imp,
+				name: imp,
+				simbolType: SymbolType {
+					kind: TYPE_MODULE,
+					name: imp,
+				},
+			}
+		}
+	}
 
 	var foundSymbol *Symbol = nil
 
@@ -649,6 +657,7 @@ func (this *Checker) addTypeHeader(value string, typeType int, node *Node) error
 			name: value,
 		},
 		node: node,
+		module: this.currentModuleName,
 	}
 
 	node.symbol = lastScope[value]
@@ -684,8 +693,6 @@ func (this *Checker) walkRootTypes(node *Node) error {
 func (this *Checker) walkRootDeclarations(node *Node) error {
 	for node != nil {
 		if node.nodeType == NODE_STRUCT {
-			// structName := node.token.tokenValue
-
 			this.symbolTables.push(node.symbolTable)
 			
 			err := this.walkStatements(node.right)
@@ -694,11 +701,6 @@ func (this *Checker) walkRootDeclarations(node *Node) error {
 			}
 
 			this.symbolTables.pop()
-
-			// err = this.addStructSymbol(structName, node)
-			// if err != nil {
-			// 	return err
-			// }
 		} else if node.nodeType == NODE_IMPLEMENT {
 			structName := node.token.tokenValue
 
@@ -725,8 +727,6 @@ func (this *Checker) walkRootDeclarations(node *Node) error {
 
 			this.symbolTables.pop()
 		} else if node.nodeType == NODE_INTERFACE {
-			// interfaceName := node.token.tokenValue
-
 			this.enterScope(node)
 
 			err := this.walkRootDeclarations(node.right)
@@ -735,11 +735,6 @@ func (this *Checker) walkRootDeclarations(node *Node) error {
 			}
 
 			this.leaveScope()
-
-			// err = this.addInterfaceSymbol(interfaceName, node)
-			// if err != nil {
-			// 	return err
-			// }
 		} else if node.nodeType == NODE_FUNCTION || node.nodeType == NODE_CONSTRUCTOR {
 			err, _ := this.addFunctionDeclaration(node.left)
 			if err != nil {
@@ -830,9 +825,11 @@ func (this *Checker) walkRoot(node *Node) error {
 }
 
 func (this *Checker) Check() error {
-	for _, asts := range this.modules {
+	for moduleName, asts := range this.modules {
 		symbolTable := make(SymbolTable)
+
 		this.symbolTables.push(&symbolTable)
+		this.currentModuleName = &moduleName
 
 		for _, ast := range asts {
 			ast.symbolTable = &symbolTable
@@ -843,10 +840,13 @@ func (this *Checker) Check() error {
 			}
 		}
 
+		this.currentModuleName = nil
 		this.symbolTables.pop()
 	}
 
-	for _, asts := range this.modules {
+	for moduleName, asts := range this.modules {
+		this.currentModuleName = &moduleName
+
 		for _, ast := range asts {
 			this.symbolTables.push(ast.symbolTable)
 
@@ -866,6 +866,8 @@ func (this *Checker) Check() error {
 
 			this.symbolTables.pop()
 		}
+
+		this.currentModuleName = nil
 	}
 
 	return nil

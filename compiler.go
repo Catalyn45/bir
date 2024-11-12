@@ -22,15 +22,17 @@ type Compiler struct {
 	blocks             Stack[*ir.Block]
 	currentInstance    value.Value
 	constructor 	   bool
+	moduleName		   *string
 }
 
-func newCompiler(asts []*Node) *Compiler {
+func newCompiler(asts []*Node, moduleName string) *Compiler {
 	m := ir.NewModule()
 	return &Compiler{
 		asts:               asts,
 		irModule:           m,
 		symbolTables:       Stack[*SymbolTable]{},
 		blocks:             Stack[*ir.Block]{},
+		moduleName: &moduleName,
 	}
 }
 
@@ -536,8 +538,12 @@ func (this *Compiler) walkRootDeclarations(node *Node) error {
 			}
 
 			functionPrefix := ""
+			if symbol.name != "main" {
+				functionPrefix = *this.moduleName + "_"
+			}
+
 			if this.currentStruct != nil {
-				functionPrefix = this.currentStruct.Name() + "_"
+				functionPrefix = functionPrefix + this.currentStruct.Name() + "_"
 			}
 
 			function := this.irModule.NewFunc(
@@ -593,7 +599,13 @@ func (this *Compiler) Compile() error {
 			return err
 		}
 
-		err = this.walkRootDeclarations(ast.right)
+		this.symbolTables.pop()
+	}
+
+	for _, ast := range this.asts {
+		this.symbolTables.push(ast.symbolTable)
+
+		err := this.walkRootDeclarations(ast.right)
 		if err != nil {
 			return err
 		}
@@ -610,12 +622,14 @@ func (this *Compiler) Compile() error {
 
 	fmt.Println(program)
 
-	err := os.WriteFile("main.ll", []byte(program), 0644)
+	outputFileName := *this.moduleName + ".ll"
+
+	err := os.WriteFile(outputFileName, []byte(program), 0644)
 	if err != nil {
 		return err
 	}
 
-	cmd := exec.Command("clang", "main.ll", "-o", "output.exe")
+	cmd := exec.Command("clang", "-c", outputFileName, "-o", *this.moduleName + ".obj")
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

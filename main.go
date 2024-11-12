@@ -55,13 +55,15 @@ func main() {
 		panic(err)
 	}
 
-	compiler := newCompiler(roots)
-	err = compiler.Compile()
+	outputProgramName := "./output.exe"
+
+	linker := newLinker(roots, outputProgramName)
+	err = linker.Link()
 	if err != nil {
 		panic(err)
 	}
 
-	cmd := exec.Command("./output.exe")
+	cmd := exec.Command(outputProgramName)
 
 	err = cmd.Run()
 	if err != nil {
