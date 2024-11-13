@@ -215,7 +215,7 @@ func (this *Compiler) walkLvalue(node *Node) (error, value.Value) {
 			return err, nil
 		}
 
-		if value == nil {
+		if value == nil && node.symbol.simbolType.kind == TYPE_FUNCTION {
 			err, function := this.createFunction(node, nil)
 			if err != nil {
 				return err, nil

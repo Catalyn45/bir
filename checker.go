@@ -409,10 +409,11 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 
 			return nil, &symbol.simbolType
 		} else {
-			err, symbol = this.searchSymbol(memberType.name)
-			if err != nil {
-				return err, nil
-			}
+			symbol = memberType.symbol
+			// err, symbol = this.searchSymbol(memberType.name)
+			// if err != nil {
+			// 	return err, nil
+			// }
 		}
 
 		if symbol.simbolType.kind != TYPE_STRUCT && symbol.simbolType.kind != TYPE_INTERFACE {

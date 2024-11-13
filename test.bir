@@ -2,32 +2,7 @@ module main
 
 import test
 
-implement T {
-    function get_a(): int {
-        return this.a
-    }
-}
-
 function main(): int {
-	var t = T(15)
-    var n = T(25)
-
-    t.next = n
-
-    t = t.next
-
-    return test.bla()
+	var s = test.S(10, 20)
+	return s.sum()
 }
-
-implement T {
-	init(a: int) {
-        this.a = a
-	}
-}
-
-struct T {
-    a: int
-    b: float
-    next: T
-}
-

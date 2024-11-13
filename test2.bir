@@ -1,5 +1,17 @@
 module test
 
-function bla(): int {
-    return 33
+struct S {
+	a: int
+	b: int
+}
+
+implement S {
+	init(a: int, b: int) {
+		this.a = a
+		this.b = b
+	}
+
+	function sum(): int {
+		return this.a + this.b
+	}
 }
