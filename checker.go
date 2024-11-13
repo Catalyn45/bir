@@ -405,6 +405,8 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 				return err, nil
 			}
 
+			node.symbol = symbol
+
 			return nil, &symbol.simbolType
 		} else {
 			err, symbol = this.searchSymbol(memberType.name)

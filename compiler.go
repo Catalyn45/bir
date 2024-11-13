@@ -18,7 +18,7 @@ type Compiler struct {
 	irModule           *ir.Module
 	symbolTables       Stack[*SymbolTable]
 	currentFunction    *ir.Func
-	currentStruct      types.Type
+	currentStruct      *types.StructType
 	blocks             Stack[*ir.Block]
 	currentInstance    value.Value
 	constructor 	   bool
@@ -216,7 +216,7 @@ func (this *Compiler) walkLvalue(node *Node) (error, value.Value) {
 		}
 
 		if value == nil {
-			err, function := this.createFunction(node)
+			err, function := this.createFunction(node, nil)
 			if err != nil {
 				return err, nil
 			}
@@ -373,13 +373,15 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 		return err, nil
 	}
 
-	if pointerType, ok := expressionValue.Type().(*types.PointerType); ok {
-		// for structs return pointer
-		if _, ok := pointerType.ElemType.(*types.StructType); ok {
-			return nil, expressionValue;
-		}
+	if expressionValue != nil {
+		if pointerType, ok := expressionValue.Type().(*types.PointerType); ok {
+			// for structs return pointer
+			if _, ok := pointerType.ElemType.(*types.StructType); ok {
+				return nil, expressionValue;
+			}
 
-		expressionValue = block.NewLoad(pointerType.ElemType, expressionValue)
+			expressionValue = block.NewLoad(pointerType.ElemType, expressionValue)
+		}
 	}
 
 	return nil, expressionValue
@@ -510,7 +512,7 @@ func (this *Compiler) walkRoot(node *Node) error {
 	return nil
 }
 
-func (this *Compiler) createFunction(node *Node) (error, value.Value) {
+func (this *Compiler) createFunction(node *Node, currentStruct *types.StructType) (error, value.Value) {
 	symbol := node.symbol
 	birSignature := symbol.simbolType.signature
 
@@ -546,11 +548,11 @@ func (this *Compiler) createFunction(node *Node) (error, value.Value) {
 
 	functionPrefix := ""
 	if symbol.name != "main" {
-		functionPrefix = *this.moduleName + "_"
+		functionPrefix = *symbol.module + "_"
 	}
 
-	if this.currentStruct != nil {
-		functionPrefix = functionPrefix + this.currentStruct.Name() + "_"
+	if currentStruct != nil {
+		functionPrefix = functionPrefix + currentStruct.Name() + "_"
 	}
 
 	function := this.irModule.NewFunc(
@@ -576,7 +578,7 @@ func (this *Compiler) walkRootDeclarations(node *Node) error {
 				structBody.Fields = append(structBody.Fields, convertedType)
 			}
 		} else if node.nodeType == NODE_FUNCTION || node.nodeType == NODE_CONSTRUCTOR {
-			err, function := this.createFunction(node.left)
+			err, function := this.createFunction(node.left, this.currentStruct)
 			if err != nil {
 				return err
 			}
