@@ -226,6 +226,30 @@ func (this *Compiler) walkLvalue(node *Node) (error, value.Value) {
 			return nil, node.symbol.value
 		}
 
+		if value == nil && node.symbol.simbolType.kind == TYPE_STRUCT {
+			err, structure := this.createStructure(node)
+			if err != nil {
+				return err, nil
+			}
+
+			node.symbol.value = structure
+
+			block := this.blocks.peek()
+
+			allocated := block.NewAlloca(node.symbol.structType)
+			
+			this.currentInstance = allocated
+			this.constructor = true
+
+			// call init function
+			initFunc, ok := (*node.symbol.node.symbolTable)["init"]
+			if ok {
+				return nil, initFunc.value
+			}
+
+			return nil, nil
+		}
+
 		if node.symbol != nil && node.symbol.simbolType.kind == TYPE_MODULE {
 			return nil, value
 		}
@@ -345,6 +369,15 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 	}
 
 	if node.nodeType == NODE_VARIABLE_DECLARATION {
+		var initValue value.Value = nil
+		if node.right != nil {
+			var err error
+			err, initValue = this.walkExpression(node.right)
+			if err != nil {
+				return err, nil
+			}
+		}
+
 		err, irType := this.convertType(&node.symbol.simbolType)
 		if err != nil {
 			return err, nil
@@ -356,12 +389,7 @@ func (this *Compiler) walkExpression(node *Node) (error, value.Value) {
 
 		node.symbol.value = allocationValue
 
-		if node.right != nil {
-			err, initValue := this.walkExpression(node.right)
-			if err != nil {
-				return err, nil
-			}
-
+		if initValue != nil {
 			block.NewStore(initValue, allocationValue)
 		}
 
@@ -562,6 +590,25 @@ func (this *Compiler) createFunction(node *Node, currentStruct *types.StructType
 	)
 
 	return nil, function
+}
+
+func (this *Compiler) createStructure(node *Node) (error, value.Value) {
+	structBody := types.NewStruct()
+
+	for field := node.right; field != nil; field = field.next {
+		err, convertedType := this.convertType(&field.symbol.simbolType)
+		if err != nil {
+			return err, nil
+		}
+
+		structBody.Fields = append(structBody.Fields, convertedType)
+	}
+
+	this.irModule.NewTypeDef(node.token.tokenValue, structBody)
+
+	node.symbol.structType = structBody
+
+	return nil, nil
 }
 
 func (this *Compiler) walkRootDeclarations(node *Node) error {
