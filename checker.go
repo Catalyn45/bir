@@ -38,7 +38,6 @@ type SymbolType struct {
 }
 
 type Symbol struct {
-	module     *string
 	name       string
 	simbolType SymbolType
 	node 	   *Node
@@ -49,27 +48,15 @@ type Symbol struct {
 type SymbolTable map[string]*Symbol
 
 type Checker struct {
-	modules map[string][]*Node
+	ast *Node
 	symbolTables  *Stack[*SymbolTable]
 	functionStack *Stack[*Symbol]
-	imports []string
 	currentStruct *SymbolType
-	currentModuleName *string
 }
 
-func newChecker(asts []*Node) *Checker {
-	modules := make(map[string][]*Node)
-
-	for _, ast := range asts {
-		medatadaNode := ast.left
-		moduleNode := medatadaNode.left
-		pathNode := moduleNode.left
-
-		modules[pathNode.token.tokenValue] = append(modules[pathNode.token.tokenValue], ast)
-	}
-
+func newChecker(ast *Node) *Checker {
 	return &Checker {
-		modules:      modules,
+		ast: ast,
 		symbolTables:  &Stack[*SymbolTable]{},
 		functionStack: &Stack[*Symbol]{},
 	}
@@ -94,7 +81,6 @@ func (this *Checker) addVariableSymbol(varName string, varType *SymbolType, node
 		name: varName,
 		simbolType: *varType,
 		node: node,
-		module: this.currentModuleName,
 	}
 
 	if node != nil {
@@ -123,7 +109,6 @@ func (this *Checker) addFunctionSymbol(functionName string, returnType *SymbolTy
 			},
 		},
 		node: node,
-		module: this.currentModuleName,
 	}
 
 	node.symbol = lastScope[functionName]
@@ -132,31 +117,7 @@ func (this *Checker) addFunctionSymbol(functionName string, returnType *SymbolTy
 	return nil, lastScope[functionName]
 }
 
-func (this *Checker) searchSymbolInModule(module string, symbolName string) (error, *Symbol) {
-	for _, node := range this.modules[module] {
-		value, ok := (*node.symbolTable)[symbolName]
-		if ok {
-			return nil, value
-		}
-	}
-
-	return fmt.Errorf("couldn't find symbol in module"), nil
-}
-
 func (this *Checker) searchSymbol(symbolName string) (error, *Symbol) {
-	for _, imp := range this.imports {
-		if imp == symbolName {
-			return nil, &Symbol {
-				module: &imp,
-				name: imp,
-				simbolType: SymbolType {
-					kind: TYPE_MODULE,
-					name: imp,
-				},
-			}
-		}
-	}
-
 	var foundSymbol *Symbol = nil
 
 	this.symbolTables.foreach(func (item *SymbolTable) (stop bool) {
@@ -400,20 +361,9 @@ func (this *Checker) determineType(node *Node) (error, *SymbolType) {
 
 		var symbol *Symbol
 		if memberType.kind == TYPE_MODULE {
-			err, symbol = this.searchSymbolInModule(memberType.name, node.token.tokenValue)
-			if err != nil {
-				return err, nil
-			}
-
-			node.symbol = symbol
-
 			return nil, &symbol.simbolType
 		} else {
 			symbol = memberType.symbol
-			// err, symbol = this.searchSymbol(memberType.name)
-			// if err != nil {
-			// 	return err, nil
-			// }
 		}
 
 		if symbol.simbolType.kind != TYPE_STRUCT && symbol.simbolType.kind != TYPE_INTERFACE {
@@ -652,7 +602,6 @@ func (this *Checker) addTypeHeader(value string, typeType int, node *Node) error
 	}
 
 	lastScope := *this.symbolTables.peek()
-
 	lastScope[value] = &Symbol {
 		name: value,
 		simbolType: SymbolType {
@@ -660,7 +609,6 @@ func (this *Checker) addTypeHeader(value string, typeType int, node *Node) error
 			name: value,
 		},
 		node: node,
-		module: this.currentModuleName,
 	}
 
 	node.symbol = lastScope[value]
@@ -807,13 +755,12 @@ func (this *Checker) walk(node *Node) error {
 }
 
 func (this *Checker) walkImports(node *Node) error {
+	// add imports to symbol tables somehow
 	var imports []string = nil
 
 	for imp := node.right; imp != nil; imp = imp.next {
 		imports = append(imports, imp.left.token.tokenValue)
 	}
-
-	node.imports = imports
 
 	return nil
 }
@@ -828,49 +775,22 @@ func (this *Checker) walkRoot(node *Node) error {
 }
 
 func (this *Checker) Check() error {
-	for moduleName, asts := range this.modules {
-		symbolTable := make(SymbolTable)
+	symbolTable := make(SymbolTable)
+	this.ast.symbolTable = &symbolTable
 
-		this.symbolTables.push(&symbolTable)
-		this.currentModuleName = &moduleName
-
-		for _, ast := range asts {
-			ast.symbolTable = &symbolTable
-
-			err := this.walkRoot(ast.right)
-			if err != nil {
-				return err
-			}
-		}
-
-		this.currentModuleName = nil
-		this.symbolTables.pop()
+	err := this.walkImports(this.ast.left)
+	if err != nil {
+		return err
 	}
 
-	for moduleName, asts := range this.modules {
-		this.currentModuleName = &moduleName
+	err = this.walkRoot(this.ast.right)
+	if err != nil {
+		return err
+	}
 
-		for _, ast := range asts {
-			this.symbolTables.push(ast.symbolTable)
-
-			err := this.walkImports(ast.left)
-			if err != nil {
-				return err
-			}
-
-			this.imports = ast.left.imports
-
-			err = this.walk(ast.right)
-			if err != nil {
-				return err
-			}
-
-			this.imports = nil
-
-			this.symbolTables.pop()
-		}
-
-		this.currentModuleName = nil
+	err = this.walk(this.ast.right)
+	if err != nil {
+		return err
 	}
 
 	return nil
