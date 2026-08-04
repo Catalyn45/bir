@@ -49,6 +49,7 @@ type SymbolTable map[string]*Symbol
 
 type Checker struct {
 	ast *Node
+	imports []string
 	symbolTables  *Stack[*SymbolTable]
 	functionStack *Stack[*Symbol]
 	currentStruct *SymbolType
@@ -119,6 +120,17 @@ func (this *Checker) addFunctionSymbol(functionName string, returnType *SymbolTy
 
 func (this *Checker) searchSymbol(symbolName string) (error, *Symbol) {
 	var foundSymbol *Symbol = nil
+	for _, imp := range this.imports {
+		if imp == symbolName {
+			return nil, &Symbol {
+				name: imp,
+				simbolType: SymbolType {
+					kind: TYPE_MODULE,
+					name: imp,
+				},
+			}
+		}
+	}
 
 	this.symbolTables.foreach(func (item *SymbolTable) (stop bool) {
 		val, ok := (*item)[symbolName]
@@ -761,6 +773,8 @@ func (this *Checker) walkImports(node *Node) error {
 	for imp := node.right; imp != nil; imp = imp.next {
 		imports = append(imports, imp.left.token.tokenValue)
 	}
+
+	this.imports = imports
 
 	return nil
 }
