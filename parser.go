@@ -90,7 +90,6 @@ type Node struct {
 	next     *Node
 	symbolTable *SymbolTable
 	symbol *Symbol
-	imports []string
 }
 
 func (this *Node) ToString() string {
@@ -1410,23 +1409,6 @@ func (this *Parser) parsePath() (error, *Node) {
 	}
 
 	this.advance()
-
-	for this.currentToken.tokenType == TOKEN_DOT {
-		this.advance()
-
-		err := this.expectToken(TOKEN_IDENTIFIER)
-		if err != nil {
-			return err, nil
-		}
-
-		pathNode = &Node{
-			nodeType: NODE_PATH,
-			token:    this.currentToken,
-			left:     pathNode,
-		}
-
-		this.advance()
-	}
 
 	return nil, pathNode
 }
